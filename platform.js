@@ -24,6 +24,7 @@ const classTypes = {
   'light': Accessory.Light,
   'window': Accessory.Window,
   'window-covering': Accessory.WindowCovering,
+  'smart-toilet-seat': Accessory.SmartToiletSeat,
 }
 
 let homebridgeRef
