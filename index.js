@@ -6,5 +6,5 @@ module.exports = (homebridge) => {
 
   BroadlinkRMPlatform.setHomebridge(homebridge);
 
-  homebridge.registerPlatform("homebridge-broadlink-rm", "BroadlinkRM", BroadlinkRMPlatform);
+  homebridge.registerPlatform("homebridge-broadlink-rm-toilet-seat", "BroadlinkRM-Toilet", BroadlinkRMPlatform);
 }
