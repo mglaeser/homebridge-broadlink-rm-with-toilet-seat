@@ -1,4 +1,3 @@
-const { Service, Characteristic } = require('hap-nodejs');
 const BroadlinkRMAccessory = require('./accessory');
 const delayForDuration = require('../helpers/delayForDuration');
 const catchDelayCancelError = require('../helpers/catchDelayCancelError');
@@ -16,13 +15,13 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
   }
 
   serviceType() {
-    return Service.Switch; // Default type (updated dynamically for each service)
+    return this.Service.Switch; // Default type (updated dynamically for each service)
   }
 
   createServiceManager(serviceConfig) {
     const { type, subtype, displayName, characteristics, data } = serviceConfig;
 
-    const service = new Service[type](displayName, subtype);
+    const service = new this.Service[type](displayName, subtype);
     const serviceManager = this.addService(service);
 
     // Save IR codes (data) for use in performSendCommand
@@ -33,7 +32,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
 
       serviceManager.addToggleCharacteristic({
         name: `${subtype}-${type}`,
-        type: Characteristic[type],
+        type: this.Characteristic[type],
         getMethod: this.getCharacteristicValue.bind(this, type, subtype),
         setMethod: this.setCharacteristicValue.bind(this, type, subtype),
         props: {
@@ -127,7 +126,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
       this.autoOffTimeoutPromise[subtype] = delayForDuration(onDuration);
       await this.autoOffTimeoutPromise[subtype];
 
-      serviceManager.setCharacteristic(Characteristic.On, false);
+      serviceManager.setCharacteristic(this.Characteristic.On, false);
     }
   }
 
@@ -141,7 +140,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
       this.autoOnTimeoutPromise[subtype] = delayForDuration(offDuration);
       await this.autoOnTimeoutPromise[subtype];
 
-      serviceManager.setCharacteristic(Characteristic.On, true);
+      serviceManager.setCharacteristic(this.Characteristic.On, true);
     }
   }
 
@@ -150,11 +149,9 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
 
     serviceManager.addToggleCharacteristic({
       name: 'switchState',
-      type: Characteristic.On,
+      type: this.Characteristic.On,
       getMethod: this.getCharacteristicValue.bind(this, 'switchState', serviceManager.subtype),
-      setMethod: this
-
-.setCharacteristicValue.bind(this, 'switchState', serviceManager.subtype),
+      setMethod: this.setCharacteristicValue.bind(this, 'switchState', serviceManager.subtype),
       props: {
         onData: data.on,
         offData: data.off,
@@ -165,7 +162,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     if (data.rotationSpeed) {
       serviceManager.addToggleCharacteristic({
         name: 'fanSpeed',
-        type: Characteristic.RotationSpeed,
+        type: this.Characteristic.RotationSpeed,
         getMethod: this.getCharacteristicValue.bind(this, 'RotationSpeed', serviceManager.subtype),
         setMethod: this.setCharacteristicValue.bind(this, 'RotationSpeed', serviceManager.subtype),
         props: {
