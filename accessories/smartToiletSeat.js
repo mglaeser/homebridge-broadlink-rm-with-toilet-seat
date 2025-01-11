@@ -4,7 +4,7 @@ const catchDelayCancelError = require('../helpers/catchDelayCancelError');
 
 class SmartToiletSeat extends BroadlinkRMAccessory {
   serviceType() {
-    return this.Service.Switch;  // Base service type doesn't matter as we're adding multiple services
+    return global.Service.Switch;  // Use global Service
   }
 
   constructor(log, config = {}) {
@@ -40,11 +40,11 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
 
   createServices() {
     // Add base accessory information
-    this.serviceInfo = new this.Service.AccessoryInformation();
+    this.serviceInfo = new global.Service.AccessoryInformation();
     this.serviceInfo
-      .setCharacteristic(this.Characteristic.Manufacturer, 'Smart Toilet')
-      .setCharacteristic(this.Characteristic.Model, 'Smart Toilet Seat')
-      .setCharacteristic(this.Characteristic.SerialNumber, 'STS-001');
+      .setCharacteristic(global.Characteristic.Manufacturer, 'Smart Toilet')
+      .setCharacteristic(global.Characteristic.Model, 'Smart Toilet Seat')
+      .setCharacteristic(global.Characteristic.SerialNumber, 'STS-001');
 
     // Create power switches
     this.powerService = this.createSwitchService('power', 'Power');
@@ -64,9 +64,9 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
   }
 
   createSwitchService(id, name) {
-    const service = new this.Service.Switch(name, id);
+    const service = new global.Service.Switch(name, id);
     
-    service.getCharacteristic(this.Characteristic.On)
+    service.getCharacteristic(global.Characteristic.On)
       .onGet(() => this.state[id].on)
       .onSet(async (value) => {
         this.state[id].on = value;
@@ -78,9 +78,9 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
   }
 
   createFanService() {
-    const service = new this.Service.Fanv2('Dry Function', 'dry');
+    const service = new global.Service.Fanv2('Dry Function', 'dry');
     
-    service.getCharacteristic(this.Characteristic.Active)
+    service.getCharacteristic(global.Characteristic.Active)
       .onGet(() => this.state.dry.active)
       .onSet(async (value) => {
         this.state.dry.active = value;
@@ -88,7 +88,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
         await this.performSend(hexData);
       });
 
-    service.getCharacteristic(this.Characteristic.RotationSpeed)
+    service.getCharacteristic(global.Characteristic.RotationSpeed)
       .onGet(() => this.state.dry.rotationSpeed)
       .onSet(async (value) => {
         this.state.dry.rotationSpeed = value;
@@ -105,15 +105,15 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
   }
 
   createValveService(id, name, valveType) {
-    const service = new this.Service.Valve(name, id);
+    const service = new global.Service.Valve(name, id);
     
     // Set valve type
-    service.setCharacteristic(this.Characteristic.ValveType, valveType);
+    service.setCharacteristic(global.Characteristic.ValveType, valveType);
     
     // Set default duration to 60 seconds
-    service.setCharacteristic(this.Characteristic.SetDuration, 60);
+    service.setCharacteristic(global.Characteristic.SetDuration, 60);
 
-    service.getCharacteristic(this.Characteristic.Active)
+    service.getCharacteristic(global.Characteristic.Active)
       .onGet(() => this.state[id].active)
       .onSet(async (value) => {
         this.state[id].active = value;
@@ -121,31 +121,31 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
         if (value) {
           await this.performSend(this.data[id].on);
           // Start auto-off timer
-          const duration = service.getCharacteristic(this.Characteristic.SetDuration).value;
+          const duration = service.getCharacteristic(global.Characteristic.SetDuration).value;
           this.startAutoOffTimer(id, service, duration);
         } else {
           await this.performSend(this.data[id].off);
         }
         
         // Update InUse characteristic
-        service.updateCharacteristic(this.Characteristic.InUse, value);
+        service.updateCharacteristic(global.Characteristic.InUse, value);
       });
 
-    service.getCharacteristic(this.Characteristic.InUse)
+    service.getCharacteristic(global.Characteristic.InUse)
       .onGet(() => this.state[id].active);
 
     return service;
   }
 
   createThermostatService(id, name) {
-    const service = new this.Service.Thermostat(name, id);
+    const service = new global.Service.Thermostat(name, id);
     
     service
-      .setCharacteristic(this.Characteristic.TemperatureDisplayUnits, this.Characteristic.TemperatureDisplayUnits.CELSIUS)
-      .setCharacteristic(this.Characteristic.CurrentTemperature, this.state[id].currentTemp)
-      .setCharacteristic(this.Characteristic.TargetTemperature, this.state[id].targetTemp);
+      .setCharacteristic(global.Characteristic.TemperatureDisplayUnits, global.Characteristic.TemperatureDisplayUnits.CELSIUS)
+      .setCharacteristic(global.Characteristic.CurrentTemperature, this.state[id].currentTemp)
+      .setCharacteristic(global.Characteristic.TargetTemperature, this.state[id].targetTemp);
 
-    service.getCharacteristic(this.Characteristic.TargetTemperature)
+    service.getCharacteristic(global.Characteristic.TargetTemperature)
       .onGet(() => this.state[id].targetTemp)
       .onSet(async (value) => {
         const oldTemp = this.state[id].targetTemp;
@@ -161,7 +161,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
         // Update current temperature to match target after a delay
         await delayForDuration(1);
         this.state[id].currentTemp = value;
-        service.updateCharacteristic(this.Characteristic.CurrentTemperature, value);
+        service.updateCharacteristic(global.Characteristic.CurrentTemperature, value);
       });
 
     return service;
@@ -179,8 +179,8 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       await this.autoOffTimeoutPromises[id];
       
       // Turn off the service after duration
-      service.updateCharacteristic(this.Characteristic.Active, false);
-      service.updateCharacteristic(this.Characteristic.InUse, false);
+      service.updateCharacteristic(global.Characteristic.Active, false);
+      service.updateCharacteristic(global.Characteristic.InUse, false);
       this.state[id].active = false;
       await this.performSend(this.data[id].off);
     } catch (err) {
