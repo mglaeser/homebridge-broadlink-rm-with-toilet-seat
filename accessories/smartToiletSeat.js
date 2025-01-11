@@ -57,14 +57,14 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     const { data, log, name, state } = this;
     const speed = state.dryRotationSpeed;
 
-    let hexData;
-    if (speed <= 33) hexData = data.rotationSpeedLow;
-    else if (speed <= 66) hexData = data.rotationSpeedMedium;
-    else hexData = data.rotationSpeedHigh;
+    let speedHexData;
+    if (speed <= 33) speedHexData = data.rotationSpeedLow;
+    else if (speed <= 66) speedHexData = data.rotationSpeedMedium;
+    else speedHexData = data.rotationSpeedHigh;
 
-    if (hexData) {
+    if (speedHexData) {
       log(`${name} setRotationSpeed: ${speed}%`);
-      await this.performSend(hexData);
+      await this.performSend(speedHexData);
     }
   }
 
