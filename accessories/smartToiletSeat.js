@@ -2,318 +2,205 @@ const BroadlinkRMAccessory = require('./accessory');
 const delayForDuration = require('../helpers/delayForDuration');
 const catchDelayCancelError = require('../helpers/catchDelayCancelError');
 
-class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
-  constructor(log, config) {
-    super(log, config);
-    
-    this.setDefaults();
-    
-    this.state = {}; // To track the state of each characteristic
-    this.serviceManagers = [];
-    const { accessories } = config;
-
-    // Initialize each accessory from the configuration
-    accessories.forEach((accessoryConfig) => this.createServiceManager(accessoryConfig));
+class SmartToiletSeat extends BroadlinkRMAccessory {
+  serviceType() {
+    return this.Service.Switch;  // Base service type doesn't matter as we're adding multiple services
   }
 
-  setDefaults() {
-    const { config } = this;
+  constructor(log, config = {}) {
+    super(log, config);
     
-    // Initialize timers
-    this.autoOffTimeoutPromise = {};
-    this.autoOnTimeoutPromise = {};
-    
-    // Temperature defaults
-    this.temperatureCallbackTimeoutPromise = {};
-    this.currentTemperatures = {};
+    // Initialize state storage
+    this.state = {
+      power: { on: false },
+      powerSave: { on: false },
+      dry: { active: false, rotationSpeed: 0 },
+      shower: { active: false },
+      bidet: { active: false },
+      massage: { active: false },
+      seatTemp: { currentTemp: 35, targetTemp: 35 },
+      waterTemp: { currentTemp: 35, targetTemp: 35 }
+    };
+
+    // Add services
+    this.createServices();
   }
 
   reset() {
     super.reset();
 
-    // Clear all timers
-    Object.keys(this.autoOffTimeoutPromise).forEach(subtype => {
-      if (this.autoOffTimeoutPromise[subtype]) {
-        this.autoOffTimeoutPromise[subtype].cancel();
-        this.autoOffTimeoutPromise[subtype] = null;
-      }
-    });
-
-    Object.keys(this.autoOnTimeoutPromise).forEach(subtype => {
-      if (this.autoOnTimeoutPromise[subtype]) {
-        this.autoOnTimeoutPromise[subtype].cancel();
-        this.autoOnTimeoutPromise[subtype] = null;
-      }
-    });
-
-    Object.keys(this.temperatureCallbackTimeoutPromise).forEach(subtype => {
-      if (this.temperatureCallbackTimeoutPromise[subtype]) {
-        this.temperatureCallbackTimeoutPromise[subtype].cancel();
-        this.temperatureCallbackTimeoutPromise[subtype] = null;
-      }
-    });
-  }
-
-  createServiceManager(accessoryConfig) {
-    const { type, name: displayName, data, setDuration, temperatureDisplayUnits } = accessoryConfig;
-
-    let ServiceClass;
-    switch (type) {
-      case 'switch':
-        ServiceClass = this.Service.Switch;
-        break;
-      case 'fan':
-        ServiceClass = this.Service.Fanv2;
-        break;
-      case 'valve':
-        ServiceClass = this.Service.Valve;
-        break;
-      case 'thermostat':
-        ServiceClass = this.Service.Thermostat;
-        break;
-      default:
-        this.log(`Unknown accessory type: ${type}`);
-        return;
-    }
-
-    const service = new ServiceClass(displayName, type);
-    const serviceManager = this.addService(service);
-
-    serviceManager.type = type;
-    serviceManager.displayName = displayName;
-    serviceManager.data = data;
-    
-    if (setDuration) {
-      serviceManager.setDuration = setDuration;
-    }
-    
-    if (temperatureDisplayUnits) {
-      serviceManager.temperatureDisplayUnits = temperatureDisplayUnits;
-    }
-
-    this.configureServiceCharacteristics(serviceManager);
-    this.serviceManagers.push(serviceManager);
-  }
-
-  configureServiceCharacteristics(serviceManager) {
-    const { type, data } = serviceManager;
-
-    switch (type) {
-      case 'switch':
-        this.configureSwitchCharacteristics(serviceManager);
-        break;
-      case 'fan':
-        this.configureFanCharacteristics(serviceManager);
-        break;
-      case 'valve':
-        this.configureValveCharacteristics(serviceManager);
-        break;
-      case 'thermostat':
-        this.configureThermostatCharacteristics(serviceManager);
-        break;
-    }
-  }
-
-  configureSwitchCharacteristics(serviceManager) {
-    serviceManager.addToggleCharacteristic({
-      name: 'switchState',
-      type: this.Characteristic.On,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this,
-      props: {
-        onData: serviceManager.data.on,
-        offData: serviceManager.data.off
-      }
-    });
-  }
-
-  configureFanCharacteristics(serviceManager) {
-    // On/Off characteristic
-    serviceManager.addToggleCharacteristic({
-      name: 'switchState',
-      type: this.Characteristic.On,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this,
-      props: {
-        onData: serviceManager.data.on,
-        offData: serviceManager.data.off
-      }
-    });
-
-    // Rotation speed characteristic
-    if (serviceManager.data.rotationSpeed) {
-      serviceManager.addToggleCharacteristic({
-        name: 'rotationSpeed',
-        type: this.Characteristic.RotationSpeed,
-        getMethod: this.getCharacteristicValue,
-        setMethod: this.setCharacteristicValue,
-        bind: this,
-        props: {
-          setValuePromise: this.setRotationSpeed.bind(this)
-        }
+    // Clear any timeouts
+    if (this.autoOffTimeoutPromises) {
+      Object.values(this.autoOffTimeoutPromises).forEach(promise => {
+        if (promise && promise.cancel) promise.cancel();
       });
     }
+    this.autoOffTimeoutPromises = {};
   }
 
-  configureValveCharacteristics(serviceManager) {
-    // Configure valve type
-    serviceManager.service.setCharacteristic(
-      this.Characteristic.ValveType,
-      this.Characteristic.ValveType.GENERIC_VALVE
-    );
+  createServices() {
+    // Add base accessory information
+    this.serviceInfo = new this.Service.AccessoryInformation();
+    this.serviceInfo
+      .setCharacteristic(this.Characteristic.Manufacturer, 'Smart Toilet')
+      .setCharacteristic(this.Characteristic.Model, 'Smart Toilet Seat')
+      .setCharacteristic(this.Characteristic.SerialNumber, 'STS-001');
 
-    // On/Off characteristic
-    serviceManager.addToggleCharacteristic({
-      name: 'active',
-      type: this.Characteristic.Active,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this,
-      props: {
-        onData: serviceManager.data.on,
-        offData: serviceManager.data.off
-      }
-    });
+    // Create power switches
+    this.powerService = this.createSwitchService('power', 'Power');
+    this.powerSaveService = this.createSwitchService('powerSave', 'Power Save Mode');
 
-    // In Use characteristic
-    serviceManager.addToggleCharacteristic({
-      name: 'inUse',
-      type: this.Characteristic.InUse,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this
-    });
+    // Create dry function (fan)
+    this.dryService = this.createFanService();
 
-    // Duration characteristic
-    if (serviceManager.setDuration) {
-      serviceManager.addToggleCharacteristic({
-        name: 'duration',
-        type: this.Characteristic.SetDuration,
-        getMethod: () => serviceManager.setDuration.default,
-        setMethod: (duration) => {
-          serviceManager.setDuration.default = duration;
-        },
-        bind: this
-      });
-    }
+    // Create water services (valves)
+    this.showerService = this.createValveService('shower', 'Shower', 3); // Shower type
+    this.bidetService = this.createValveService('bidet', 'Bidet', 1);    // Generic valve type
+    this.massageService = this.createValveService('massage', 'Massage', 0); // Generic valve type
+
+    // Create temperature controls
+    this.seatTempService = this.createThermostatService('seatTemp', 'Seat Temperature');
+    this.waterTempService = this.createThermostatService('waterTemp', 'Water Temperature');
   }
 
-  configureThermostatCharacteristics(serviceManager) {
-    // Current temperature
-    serviceManager.addToggleCharacteristic({
-      name: 'currentTemperature',
-      type: this.Characteristic.CurrentTemperature,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this
-    });
-
-    // Target temperature
-    serviceManager.addToggleCharacteristic({
-      name: 'targetTemperature',
-      type: this.Characteristic.TargetTemperature,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this,
-      props: {
-        setValuePromise: this.setTargetTemperature.bind(this)
-      }
-    });
-
-    // Temperature display units
-    serviceManager.addToggleCharacteristic({
-      name: 'temperatureDisplayUnits',
-      type: this.Characteristic.TemperatureDisplayUnits,
-      getMethod: () => serviceManager.temperatureDisplayUnits === 'Celsius' 
-        ? this.Characteristic.TemperatureDisplayUnits.CELSIUS 
-        : this.Characteristic.TemperatureDisplayUnits.FAHRENHEIT,
-      setMethod: () => {},
-      bind: this
-    });
-  }
-
-  async setTargetTemperature(hexData, previousValue, subtype) {
-    const serviceManager = this.serviceManagers.find(sm => sm.displayName === subtype);
-    if (!serviceManager) return;
-
-    const targetTemp = this.state[subtype]?.targetTemperature ?? 20;
-    const currentTemp = this.currentTemperatures[subtype] ?? 20;
-
-    // Determine if we need to increase or decrease temperature
-    if (targetTemp > currentTemp) {
-      await this.performSend(serviceManager.data.temperatureUp);
-    } else if (targetTemp < currentTemp) {
-      await this.performSend(serviceManager.data.temperatureDown);
-    }
-
-    // Update current temperature after a delay
-    this.temperatureCallbackTimeoutPromise[subtype] = delayForDuration(1);
-    await this.temperatureCallbackTimeoutPromise[subtype];
+  createSwitchService(id, name) {
+    const service = new this.Service.Switch(name, id);
     
-    this.currentTemperatures[subtype] = targetTemp;
-    serviceManager.setCharacteristic(this.Characteristic.CurrentTemperature, targetTemp);
-  }
-
-  async setRotationSpeed(hexData, previousValue, subtype) {
-    const serviceManager = this.serviceManagers.find(sm => sm.displayName === subtype);
-    if (!serviceManager?.data?.rotationSpeed) return;
-
-    const speed = this.state[subtype]?.rotationSpeed ?? 0;
-    let command;
-
-    if (speed <= 33) {
-      command = serviceManager.data.rotationSpeed.low;
-    } else if (speed <= 66) {
-      command = serviceManager.data.rotationSpeed.medium;
-    } else {
-      command = serviceManager.data.rotationSpeed.high;
-    }
-
-    if (command) {
-      await this.performSend(command);
-    }
-  }
-
-  getCharacteristicValue(characteristicType, subtype) {
-    return this.state[subtype]?.[characteristicType] ?? false;
-  }
-
-  async setCharacteristicValue(characteristicType, subtype, value) {
-    await catchDelayCancelError(async () => {
-      if (!this.state[subtype]) this.state[subtype] = {};
-      this.state[subtype][characteristicType] = value;
-
-      const serviceManager = this.serviceManagers.find(sm => sm.displayName === subtype);
-      if (!serviceManager) return;
-
-      if (characteristicType === 'active' && serviceManager.type === 'valve') {
-        this.state[subtype].inUse = value;
-        serviceManager.setCharacteristic(this.Characteristic.InUse, value);
-      }
-
-      const data = serviceManager.data;
-      let hexData;
-
-      switch (characteristicType) {
-        case 'switchState':
-        case 'active':
-          hexData = value ? data.on : data.off;
-          break;
-        case 'targetTemperature':
-          await this.setTargetTemperature(null, null, subtype);
-          return;
-        case 'rotationSpeed':
-          await this.setRotationSpeed(null, null, subtype);
-          return;
-      }
-
-      if (hexData) {
+    service.getCharacteristic(this.Characteristic.On)
+      .onGet(() => this.state[id].on)
+      .onSet(async (value) => {
+        this.state[id].on = value;
+        const hexData = this.data[id][value ? 'on' : 'off'];
         await this.performSend(hexData);
-      }
-    });
+      });
+
+    return service;
+  }
+
+  createFanService() {
+    const service = new this.Service.Fanv2('Dry Function', 'dry');
+    
+    service.getCharacteristic(this.Characteristic.Active)
+      .onGet(() => this.state.dry.active)
+      .onSet(async (value) => {
+        this.state.dry.active = value;
+        const hexData = this.data.dry[value ? 'on' : 'off'];
+        await this.performSend(hexData);
+      });
+
+    service.getCharacteristic(this.Characteristic.RotationSpeed)
+      .onGet(() => this.state.dry.rotationSpeed)
+      .onSet(async (value) => {
+        this.state.dry.rotationSpeed = value;
+        let hexData;
+        
+        if (value <= 33) hexData = this.data.dry.fanSpeed10;
+        else if (value <= 66) hexData = this.data.dry.fanSpeed50;
+        else hexData = this.data.dry.fanSpeed100;
+        
+        await this.performSend(hexData);
+      });
+
+    return service;
+  }
+
+  createValveService(id, name, valveType) {
+    const service = new this.Service.Valve(name, id);
+    
+    // Set valve type
+    service.setCharacteristic(this.Characteristic.ValveType, valveType);
+    
+    // Set default duration to 60 seconds
+    service.setCharacteristic(this.Characteristic.SetDuration, 60);
+
+    service.getCharacteristic(this.Characteristic.Active)
+      .onGet(() => this.state[id].active)
+      .onSet(async (value) => {
+        this.state[id].active = value;
+        
+        if (value) {
+          await this.performSend(this.data[id].on);
+          // Start auto-off timer
+          const duration = service.getCharacteristic(this.Characteristic.SetDuration).value;
+          this.startAutoOffTimer(id, service, duration);
+        } else {
+          await this.performSend(this.data[id].off);
+        }
+        
+        // Update InUse characteristic
+        service.updateCharacteristic(this.Characteristic.InUse, value);
+      });
+
+    service.getCharacteristic(this.Characteristic.InUse)
+      .onGet(() => this.state[id].active);
+
+    return service;
+  }
+
+  createThermostatService(id, name) {
+    const service = new this.Service.Thermostat(name, id);
+    
+    service
+      .setCharacteristic(this.Characteristic.TemperatureDisplayUnits, this.Characteristic.TemperatureDisplayUnits.CELSIUS)
+      .setCharacteristic(this.Characteristic.CurrentTemperature, this.state[id].currentTemp)
+      .setCharacteristic(this.Characteristic.TargetTemperature, this.state[id].targetTemp);
+
+    service.getCharacteristic(this.Characteristic.TargetTemperature)
+      .onGet(() => this.state[id].targetTemp)
+      .onSet(async (value) => {
+        const oldTemp = this.state[id].targetTemp;
+        this.state[id].targetTemp = value;
+        
+        // Send appropriate IR commands based on temperature change
+        if (value > oldTemp) {
+          await this.performSend(this.data[id].temperatureUp);
+        } else if (value < oldTemp) {
+          await this.performSend(this.data[id].temperatureDown);
+        }
+        
+        // Update current temperature to match target after a delay
+        await delayForDuration(1);
+        this.state[id].currentTemp = value;
+        service.updateCharacteristic(this.Characteristic.CurrentTemperature, value);
+      });
+
+    return service;
+  }
+
+  async startAutoOffTimer(id, service, duration) {
+    // Clear any existing timer
+    if (this.autoOffTimeoutPromises?.[id]) {
+      this.autoOffTimeoutPromises[id].cancel();
+    }
+
+    try {
+      this.autoOffTimeoutPromises = this.autoOffTimeoutPromises || {};
+      this.autoOffTimeoutPromises[id] = delayForDuration(duration);
+      await this.autoOffTimeoutPromises[id];
+      
+      // Turn off the service after duration
+      service.updateCharacteristic(this.Characteristic.Active, false);
+      service.updateCharacteristic(this.Characteristic.InUse, false);
+      this.state[id].active = false;
+      await this.performSend(this.data[id].off);
+    } catch (err) {
+      if (err.message !== 'timeout cancelled') throw err;
+    }
+  }
+
+  getServices() {
+    return [
+      this.serviceInfo,
+      this.powerService,
+      this.powerSaveService,
+      this.dryService,
+      this.showerService,
+      this.bidetService,
+      this.massageService,
+      this.seatTempService,
+      this.waterTempService
+    ];
   }
 }
 
-module.exports = SmartToiletSeatAccessory;
+module.exports = SmartToiletSeat;
