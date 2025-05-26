@@ -23,9 +23,8 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     
     const { state } = this;
 
-    // Only set the basic states for now
+    // Initialize state like the basic switch
     state.switchState = false;
-    state.powerSaveState = false;
   }
 
   reset() {
@@ -44,25 +43,25 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     return hexData;
   }
 
-  // Follow the same pattern as switch.js
+  // Copy the exact method from switch.js
   async setSwitchState(hexData) {
     const { data, host, log, name, debug } = this;
-    
+
     this.reset();
 
-    if (hexData) {
-      log(`${name} switching power: ${this.state.switchState ? 'ON' : 'OFF'}`);
-      await this.performSend(this.convertHexData(hexData));
-    }
+    if (hexData) await this.performSend(this.convertHexData(hexData));
 
     this.checkAutoOnOff();
   }
 
+  // Copy the exact configureServiceManager from switch.js with minimal changes
   configureServiceManager(serviceManager) {
     const { data } = this;
-    const { on, off } = data || {};
-
-    // Follow the exact same pattern as switch.js
+    
+    // Handle both data structures: data.powerOn/powerOff or data.on/off
+    const onData = data.powerOn || data.on;
+    const offData = data.powerOff || data.off;
+    
     serviceManager.addToggleCharacteristic({
       name: 'switchState',
       type: Characteristic.On,
@@ -70,29 +69,11 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       setMethod: this.setCharacteristicValue,
       bind: this,
       props: {
-        onData: data.powerOn || on,
-        offData: data.powerOff || off,
+        onData: onData,
+        offData: offData,
         setValuePromise: this.setSwitchState.bind(this)
       }
     });
-
-    // Commenting out ALL other characteristics until the basic switch works
-    // We'll add them back one by one once this is stable
-
-    /*
-    // Power Save Mode
-    serviceManager.addToggleCharacteristic({
-      name: 'powerSaveState',
-      type: Characteristic.On,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this,
-      props: {
-        onData: data.powerSaveOn,
-        offData: data.powerSaveOff
-      }
-    });
-    */
   }
 }
 
