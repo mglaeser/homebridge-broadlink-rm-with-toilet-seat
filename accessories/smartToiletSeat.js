@@ -2,6 +2,8 @@ const BroadlinkRMAccessory = require('./accessory');
 
 class SmartToiletSeat extends BroadlinkRMAccessory {
 
+  serviceType() { return Service.Switch } // Required by platform helper but not used
+
   constructor(log, config = {}) {
     // Ensure required properties
     if (!config.name) config.name = "Smart Toilet Seat";
