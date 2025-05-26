@@ -9,14 +9,14 @@ class SmartToiletSeat extends SwitchAccessory {
     if (!config.name) config.name = "Smart Toilet Seat";
     
     // Convert numeric hex codes to strings before passing to parent
-    const convertedConfig = this.convertHexCodes(config);
+    const convertedConfig = SmartToiletSeat.convertHexCodes(config);
     
     super(log, convertedConfig);
     
     this.checkConfig(config);
   }
 
-  convertHexCodes(config) {
+  static convertHexCodes(config) {
     const converted = { ...config };
     if (converted.data) {
       converted.data = { ...converted.data };
