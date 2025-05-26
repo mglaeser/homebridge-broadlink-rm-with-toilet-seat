@@ -44,9 +44,9 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     return hexData;
   }
 
-  // Override the parent's setSwitchState to handle the main power
+  // Follow the same pattern as switch.js
   async setSwitchState(hexData) {
-    const { log, name } = this;
+    const { data, host, log, name, debug } = this;
     
     this.reset();
 
@@ -60,8 +60,9 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
 
   configureServiceManager(serviceManager) {
     const { data } = this;
+    const { on, off } = data || {};
 
-    // ONLY Main Power Switch for now - let's get this working first
+    // Follow the exact same pattern as switch.js
     serviceManager.addToggleCharacteristic({
       name: 'switchState',
       type: Characteristic.On,
@@ -69,8 +70,8 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       setMethod: this.setCharacteristicValue,
       bind: this,
       props: {
-        onData: data.powerOn,
-        offData: data.powerOff,
+        onData: data.powerOn || on,
+        offData: data.powerOff || off,
         setValuePromise: this.setSwitchState.bind(this)
       }
     });
