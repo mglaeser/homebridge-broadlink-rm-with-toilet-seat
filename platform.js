@@ -36,6 +36,13 @@ const BroadlinkRMPlatform = class extends HomebridgePlatform {
     super(log, config, homebridgeRef);
   }
 
+  configureServiceManager() {
+    const services = this.getServices();
+    services.forEach(service => {
+      this.addService(service);
+    });
+  }
+
   addAccessories (accessories) {
     const { config, log } = this;
 
