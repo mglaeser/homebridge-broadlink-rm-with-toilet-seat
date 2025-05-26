@@ -6,8 +6,8 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     // Ensure required properties
     if (!config.name) config.name = "Smart Toilet Seat";
     
-    // Convert numeric hex codes to strings
-    this.convertConfigHexCodes(config);
+    // Convert numeric hex codes to strings BEFORE super()
+    SmartToiletSeat.convertConfigHexCodes(config);
     
     super(log, config);
     
@@ -26,7 +26,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     this.waterFunctionTimeouts = {};
   }
 
-  convertConfigHexCodes(config) {
+  static convertConfigHexCodes(config) {
     if (config.data) {
       Object.keys(config.data).forEach(key => {
         if (typeof config.data[key] === 'number') {
