@@ -10,7 +10,26 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
   constructor (log, config = {}) {   
     super(log, config);
 
+    // Don't set manufacturer/model to avoid log errors
+    // this.manufacturer = 'Smart Toilet';
+    // this.model = 'Smart Toilet Seat';
+    // this.serialNumber = 'STS-001';
+
+    // Convert all numeric hex codes to strings before the platform helper sees them
+    this.convertConfigHexCodes(config);
+
     if (!config.isUnitTest) this.checkPing(ping)
+  }
+
+  // Convert numeric hex codes to strings to satisfy platform helper
+  convertConfigHexCodes(config) {
+    if (config.data) {
+      Object.keys(config.data).forEach(key => {
+        if (typeof config.data[key] === 'number') {
+          config.data[key] = config.data[key].toString();
+        }
+      });
+    }
   }
 
   setDefaults () {
@@ -103,17 +122,10 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
 
     this.reset();
 
-    if (hexData) await this.performSend(this.convertHexData(hexData));
+    // Remove the convertHexData call since conversion happens in constructor
+    if (hexData) await this.performSend(hexData);
 
     this.checkAutoOnOff();
-  }
-
-  // Convert numeric hex codes to strings for Broadlink sending
-  convertHexData(hexData) {
-    if (typeof hexData === 'number') {
-      return hexData.toString();
-    }
-    return hexData;
   }
 
   async checkAutoOff () {
