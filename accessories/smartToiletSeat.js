@@ -2,32 +2,38 @@ const BroadlinkRMAccessory = require('./accessory');
 
 class SmartToiletSeat extends BroadlinkRMAccessory {
 
-  serviceType() { return Service.Switch } // Primary service
-
   constructor(log, config = {}) {
     // Ensure required properties
     if (!config.name) config.name = "Smart Toilet Seat";
     
-    // Convert numeric hex codes to strings before passing to parent
-    const convertedConfig = SmartToiletSeat.convertHexCodes(config);
+    // Convert numeric hex codes to strings
+    this.convertConfigHexCodes(config);
     
-    super(log, convertedConfig);
+    super(log, config);
     
     this.checkConfig(config);
+    
+    // Initialize state
+    this.state = {
+      powerState: false,
+      powerSaveState: false,
+      showerActive: false,
+      bidetActive: false,
+      dryActive: false
+    };
+    
+    // Auto-off timeouts for water functions
+    this.waterFunctionTimeouts = {};
   }
 
-  static convertHexCodes(config) {
-    const converted = { ...config };
-    if (converted.data) {
-      converted.data = { ...converted.data };
-      // Convert all numeric values to strings
-      Object.keys(converted.data).forEach(key => {
-        if (typeof converted.data[key] === 'number') {
-          converted.data[key] = converted.data[key].toString();
+  convertConfigHexCodes(config) {
+    if (config.data) {
+      Object.keys(config.data).forEach(key => {
+        if (typeof config.data[key] === 'number') {
+          config.data[key] = config.data[key].toString();
         }
       });
     }
-    return converted;
   }
 
   checkConfig(config) {
@@ -37,7 +43,6 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       return;
     }
 
-    // Check for the required hex codes
     const requiredCodes = ['powerOn', 'powerOff', 'powerSaveOn', 'powerSaveOff', 'showerOn', 'showerOff', 'bidetOn', 'bidetOff', 'dryOn', 'dryOff'];
     const missingCodes = requiredCodes.filter(code => !data[code]);
     if (missingCodes.length > 0) {
@@ -47,30 +52,107 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     }
   }
 
-  setDefaults() {
-    super.setDefaults();
+  // Override getServices to use direct Homebridge API instead of serviceManager
+  getServices() {
+    const { config, name, log } = this;
+    const { data } = config;
     
-    const { state } = this;
-
-    // State for all 5 functions
-    state.powerState = false;          // Main power
-    state.powerSaveState = false;      // Power save mode
-    state.showerActive = false;        // Shower valve
-    state.bidetActive = false;         // Bidet valve  
-    state.dryActive = false;           // Dry function
+    const services = [];
     
-    // Auto-off timeouts for water functions
-    this.autoOffTimeouts = {};
-  }
+    // Accessory Information Service
+    const accessoryInformation = new Service.AccessoryInformation();
+    accessoryInformation
+      .setCharacteristic(Characteristic.Manufacturer, 'Smart Toilet')
+      .setCharacteristic(Characteristic.Model, 'Toilet Seat')
+      .setCharacteristic(Characteristic.SerialNumber, 'STS-001');
+    services.push(accessoryInformation);
 
-  reset() {
-    super.reset();
+    // 1. Main Power Service (Switch)
+    const powerService = new Service.Switch('Power', 'power');
+    powerService.getCharacteristic(Characteristic.On)
+      .onGet(() => {
+        log(`${name} getPowerState: ${this.state.powerState}`);
+        return this.state.powerState;
+      })
+      .onSet(async (value) => {
+        log(`${name} setPowerState: ${value}`);
+        this.state.powerState = value;
+        const hexData = value ? data.powerOn : data.powerOff;
+        if (hexData) await this.performSend(hexData);
+      });
+    services.push(powerService);
 
-    // Clear all auto-off timeouts
-    Object.values(this.autoOffTimeouts).forEach(timeout => {
-      if (timeout) clearTimeout(timeout);
-    });
-    this.autoOffTimeouts = {};
+    // 2. Power Save Service (Outlet with unique subtype)
+    const powerSaveService = new Service.Outlet('Power Save', 'powersave');
+    powerSaveService.getCharacteristic(Characteristic.On)
+      .onGet(() => {
+        log(`${name} getPowerSaveState: ${this.state.powerSaveState}`);
+        return this.state.powerSaveState;
+      })
+      .onSet(async (value) => {
+        log(`${name} setPowerSaveState: ${value}`);
+        this.state.powerSaveState = value;
+        const hexData = value ? data.powerSaveOn : data.powerSaveOff;
+        if (hexData) await this.performSend(hexData);
+      });
+    
+    // Outlet requires OutletInUse characteristic
+    powerSaveService.getCharacteristic(Characteristic.OutletInUse)
+      .onGet(() => this.state.powerSaveState);
+    services.push(powerSaveService);
+
+    // 3. Shower Service (Valve with unique subtype)
+    const showerService = new Service.Valve('Shower', 'shower');
+    showerService.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.SHOWER);
+    showerService.getCharacteristic(Characteristic.Active)
+      .onGet(() => {
+        log(`${name} getShowerActive: ${this.state.showerActive}`);
+        return this.state.showerActive ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE;
+      })
+      .onSet(async (value) => {
+        const isActive = value === Characteristic.Active.ACTIVE;
+        log(`${name} setShowerActive: ${isActive}`);
+        await this.setWaterFunction('shower', isActive);
+      });
+    
+    showerService.getCharacteristic(Characteristic.InUse)
+      .onGet(() => this.state.showerActive ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
+    services.push(showerService);
+
+    // 4. Bidet Service (Valve with unique subtype)
+    const bidetService = new Service.Valve('Bidet', 'bidet');
+    bidetService.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.SHOWER);
+    bidetService.getCharacteristic(Characteristic.Active)
+      .onGet(() => {
+        log(`${name} getBidetActive: ${this.state.bidetActive}`);
+        return this.state.bidetActive ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE;
+      })
+      .onSet(async (value) => {
+        const isActive = value === Characteristic.Active.ACTIVE;
+        log(`${name} setBidetActive: ${isActive}`);
+        await this.setWaterFunction('bidet', isActive);
+      });
+    
+    bidetService.getCharacteristic(Characteristic.InUse)
+      .onGet(() => this.state.bidetActive ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
+    services.push(bidetService);
+
+    // 5. Dry Service (Fan with unique subtype)
+    const dryService = new Service.Fan('Dry', 'dry');
+    dryService.getCharacteristic(Characteristic.On)
+      .onGet(() => {
+        log(`${name} getDryActive: ${this.state.dryActive}`);
+        return this.state.dryActive;
+      })
+      .onSet(async (value) => {
+        log(`${name} setDryActive: ${value}`);
+        this.state.dryActive = value;
+        const hexData = value ? data.dryOn : data.dryOff;
+        if (hexData) await this.performSend(hexData);
+      });
+    services.push(dryService);
+
+    return services;
   }
 
   // Water function with auto-off
@@ -84,127 +166,37 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       this.state[stateKey] = active;
       
       // Clear existing timeout
-      if (this.autoOffTimeouts[functionType]) {
-        clearTimeout(this.autoOffTimeouts[functionType]);
-        delete this.autoOffTimeouts[functionType];
+      if (this.waterFunctionTimeouts[functionType]) {
+        clearTimeout(this.waterFunctionTimeouts[functionType]);
+        delete this.waterFunctionTimeouts[functionType];
       }
       
       // Set auto-off for water functions (60 seconds)
       if (active) {
         log(`${name} ${functionType}: Auto-off in 60 seconds`);
-        this.autoOffTimeouts[functionType] = setTimeout(async () => {
+        this.waterFunctionTimeouts[functionType] = setTimeout(async () => {
           this.state[stateKey] = false;
           await this.performSend(data[`${functionType}Off`]);
-          // Notify HomeKit of the change
-          this.serviceManager.refreshCharacteristicUI(Characteristic.Active);
-          delete this.autoOffTimeouts[functionType];
+          delete this.waterFunctionTimeouts[functionType];
+          
+          // Update HomeKit - find the service and update it
+          const services = this.getServices();
+          const service = services.find(s => s.subtype === functionType);
+          if (service) {
+            service.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
+            service.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
+          }
         }, 60000);
       }
     }
   }
 
-  // Main power control
-  async setPowerState(hexData) {
-    const { data } = this;
-    if (hexData) {
-      await this.performSend(hexData);
-    }
-  }
-
-  // Power save control  
-  async setPowerSaveState(hexData) {
-    const { data } = this;
-    if (hexData) {
-      await this.performSend(hexData);
-    }
-  }
-
-  // Dry function control
-  async setDryState(hexData) {
-    const { data } = this;
-    if (hexData) {
-      await this.performSend(hexData);
-    }
-  }
-
-  configureServiceManager(serviceManager) {
-    const { data } = this;
-
-    // Main Power Service (Switch)
-    serviceManager.addToggleCharacteristic({
-      name: 'powerState',
-      type: Characteristic.On,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this,
-      props: {
-        onData: data.powerOn,
-        offData: data.powerOff,
-        setValuePromise: this.setPowerState.bind(this)
-      }
+  // Clean up timeouts when accessory is removed
+  destroy() {
+    Object.values(this.waterFunctionTimeouts).forEach(timeout => {
+      if (timeout) clearTimeout(timeout);
     });
-
-    // Power Save Service (Outlet)
-    serviceManager.addToggleCharacteristic({
-      name: 'powerSaveState', 
-      type: Characteristic.On,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this,
-      props: {
-        onData: data.powerSaveOn,
-        offData: data.powerSaveOff,
-        setValuePromise: this.setPowerSaveState.bind(this),
-        serviceType: Service.Outlet
-      }
-    });
-
-    // Shower Valve Service
-    serviceManager.addToggleCharacteristic({
-      name: 'showerActive',
-      type: Characteristic.Active,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this,
-      props: {
-        setValuePromise: async (hexData, previousValue) => {
-          const isActive = this.state.showerActive;
-          await this.setWaterFunction('shower', isActive);
-        },
-        serviceType: Service.Valve
-      }
-    });
-
-    // Bidet Valve Service
-    serviceManager.addToggleCharacteristic({
-      name: 'bidetActive',
-      type: Characteristic.Active,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this,
-      props: {
-        setValuePromise: async (hexData, previousValue) => {
-          const isActive = this.state.bidetActive;
-          await this.setWaterFunction('bidet', isActive);
-        },
-        serviceType: Service.Valve
-      }
-    });
-
-    // Dry Function Service (Fan)
-    serviceManager.addToggleCharacteristic({
-      name: 'dryActive',
-      type: Characteristic.Active,
-      getMethod: this.getCharacteristicValue,
-      setMethod: this.setCharacteristicValue,
-      bind: this,
-      props: {
-        onData: data.dryOn,
-        offData: data.dryOff,
-        setValuePromise: this.setDryState.bind(this),
-        serviceType: Service.Fan
-      }
-    });
+    this.waterFunctionTimeouts = {};
   }
 }
 
