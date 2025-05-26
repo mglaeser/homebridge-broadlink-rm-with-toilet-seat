@@ -50,10 +50,113 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     await this.performSend(data);
   }
 
+  // Override the parent's setSwitchState to handle the main power
+  async setSwitchState(hexData) {
+    const { log, name } = this;
+    
+    this.reset();
+
+    if (hexData) {
+      log(`${name} switching power: ${this.state.switchState ? 'ON' : 'OFF'}`);
+      await this.performSend(hexData);
+    }
+
+    this.checkAutoOnOff();
+  }
+
+  // Custom handlers for different functions
+  async setDryActive(value, callback) {
+    const { data, log, name } = this;
+    
+    this.state.dryActive = value;
+    const hexData = value ? data.dryOn : data.dryOff;
+    
+    if (hexData) {
+      log(`${name} dry function: ${value ? 'ON' : 'OFF'}`);
+      await this.performSend(hexData);
+    }
+    
+    callback();
+  }
+
+  async setDryRotationSpeed(value, callback) {
+    const { data, log, name } = this;
+    
+    this.state.dryRotationSpeed = value;
+    
+    let hexData;
+    if (value <= 33) hexData = data.rotationSpeedLow;
+    else if (value <= 66) hexData = data.rotationSpeedMedium;
+    else hexData = data.rotationSpeedHigh;
+    
+    if (hexData) {
+      log(`${name} dry speed: ${value}%`);
+      await this.performSend(hexData);
+    }
+    
+    callback();
+  }
+
+  async setValveActive(valveType, value, callback) {
+    const { data, log, name, state, serviceManager } = this;
+    const activeKey = `valve${valveType}Active`;
+    const lcType = valveType.toLowerCase();
+    
+    state[activeKey] = value;
+    const hexData = value ? data[`${lcType}On`] : data[`${lcType}Off`];
+    
+    if (hexData) {
+      log(`${name} ${valveType} valve: ${value ? 'ON' : 'OFF'}`);
+      await this.performSend(hexData);
+    }
+    
+    // Handle auto-off for valves
+    if (value) {
+      if (this.autoOffTimeouts[valveType]) {
+        clearTimeout(this.autoOffTimeouts[valveType]);
+      }
+
+      this.autoOffTimeouts[valveType] = setTimeout(async () => {
+        state[activeKey] = false;
+        serviceManager.refreshCharacteristicUI(Characteristic.Active);
+        if (data[`${lcType}Off`]) {
+          log(`${name} ${valveType} valve: AUTO OFF`);
+          await this.performSend(data[`${lcType}Off`]);
+        }
+      }, 60000); // 60 seconds auto-off
+    }
+    
+    callback();
+  }
+
+  async setTemperature(type, value, callback) {
+    const { data, log, name, state } = this;
+    const currentKey = `${type}CurrentTemperature`;
+    const targetKey = `${type}TargetTemperature`;
+    
+    const current = state[currentKey];
+    state[targetKey] = value;
+
+    if (value > current) {
+      if (data[`${type}TempUp`]) {
+        log(`${name} ${type} temperature UP: ${value}°C`);
+        await this.performSend(data[`${type}TempUp`]);
+      }
+    } else if (value < current) {
+      if (data[`${type}TempDown`]) {
+        log(`${name} ${type} temperature DOWN: ${value}°C`);
+        await this.performSend(data[`${type}TempDown`]);
+      }
+    }
+
+    state[currentKey] = value;
+    callback();
+  }
+
   configureServiceManager(serviceManager) {
     const { data } = this;
 
-    // Power Switch
+    // Main Power Switch
     serviceManager.addToggleCharacteristic({
       name: 'switchState',
       type: Characteristic.On,
@@ -62,11 +165,12 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       bind: this,
       props: {
         onData: data.powerOn,
-        offData: data.powerOff
+        offData: data.powerOff,
+        setValuePromise: this.setSwitchState.bind(this)
       }
     });
 
-    // Power Save
+    // Power Save Mode
     serviceManager.addToggleCharacteristic({
       name: 'powerSaveState',
       type: Characteristic.On,
@@ -79,7 +183,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       }
     });
 
-    // Dry Function - Use separate get/set methods instead of addToggleCharacteristic
+    // Dry Function
     serviceManager.addGetCharacteristic({
       name: 'dryActive',
       type: Characteristic.Active,
@@ -90,11 +194,10 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     serviceManager.addSetCharacteristic({
       name: 'dryActive',
       type: Characteristic.Active,
-      method: this.setCharacteristicValue,
-      bind: this
+      method: this.setDryActive.bind(this)
     });
 
-    // Dry Speed
+    // Dry Rotation Speed
     if (data.rotationSpeedLow || data.rotationSpeedMedium || data.rotationSpeedHigh) {
       serviceManager.addGetCharacteristic({
         name: 'dryRotationSpeed',
@@ -106,23 +209,13 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       serviceManager.addSetCharacteristic({
         name: 'dryRotationSpeed',
         type: Characteristic.RotationSpeed,
-        method: async (value, callback) => {
-          this.state.dryRotationSpeed = value;
-          
-          if (value <= 33) await this.performSend(data.rotationSpeedLow);
-          else if (value <= 66) await this.performSend(data.rotationSpeedMedium);
-          else await this.performSend(data.rotationSpeedHigh);
-          
-          callback();
-        },
-        bind: this
+        method: this.setDryRotationSpeed.bind(this)
       });
     }
 
-    // Valves
+    // Valve Controls
     ['Shower', 'Bidet', 'Massage'].forEach((valveType) => {
       const activeKey = `valve${valveType}Active`;
-      const lcType = valveType.toLowerCase();
       
       serviceManager.addGetCharacteristic({
         name: activeKey,
@@ -134,36 +227,16 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       serviceManager.addSetCharacteristic({
         name: activeKey,
         type: Characteristic.Active,
-        method: async (value, callback) => {
-          this.state[activeKey] = value;
-          
-          const hexData = value ? data[`${lcType}On`] : data[`${lcType}Off`];
-          if (hexData) await this.performSend(hexData);
-          
-          // Handle auto-off
-          if (value) {
-            if (this.autoOffTimeouts[valveType]) {
-              clearTimeout(this.autoOffTimeouts[valveType]);
-            }
-
-            this.autoOffTimeouts[valveType] = setTimeout(async () => {
-              this.state[activeKey] = false;
-              serviceManager.refreshCharacteristicUI(Characteristic.Active);
-              if (data[`${lcType}Off`]) await this.performSend(data[`${lcType}Off`]);
-            }, 60000);
-          }
-          
-          callback();
-        },
-        bind: this
+        method: (value, callback) => this.setValveActive(valveType, value, callback)
       });
     });
 
-    // Temperatures
+    // Temperature Controls
     ['seat', 'shower'].forEach(type => {
       const currentKey = `${type}CurrentTemperature`;
       const targetKey = `${type}TargetTemperature`;
 
+      // Current Temperature (read-only)
       serviceManager.addGetCharacteristic({
         name: currentKey,
         type: Characteristic.CurrentTemperature,
@@ -171,6 +244,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
         bind: this
       });
 
+      // Target Temperature (read/write)
       serviceManager.addGetCharacteristic({
         name: targetKey,
         type: Characteristic.TargetTemperature,
@@ -181,27 +255,14 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       serviceManager.addSetCharacteristic({
         name: targetKey,
         type: Characteristic.TargetTemperature,
-        method: async (value, callback) => {
-          const current = this.state[currentKey];
-          this.state[targetKey] = value;
-
-          if (value > current) {
-            if (data[`${type}TempUp`]) await this.performSend(data[`${type}TempUp`]);
-          } else if (value < current) {
-            if (data[`${type}TempDown`]) await this.performSend(data[`${type}TempDown`]);
-          }
-
-          this.state[currentKey] = value;
-          callback();
-        },
-        bind: this
+        method: (value, callback) => this.setTemperature(type, value, callback)
       });
 
+      // Temperature Display Units (always Celsius)
       serviceManager.addGetCharacteristic({
         name: `${type}DisplayUnits`,
         type: Characteristic.TemperatureDisplayUnits,
-        method: (callback) => callback(null, 0), // 0 = Celsius
-        bind: this
+        method: (callback) => callback(null, 0) // 0 = Celsius
       });
     });
   }
