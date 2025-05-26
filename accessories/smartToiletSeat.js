@@ -1,8 +1,8 @@
-const SwitchAccessory = require('./switch');
+const BroadlinkRMAccessory = require('./accessory');
 
-class SmartToiletSeat extends SwitchAccessory {
+class SmartToiletSeat extends BroadlinkRMAccessory {
 
-  serviceType() { return Service.Switch }
+  serviceType() { return Service.Switch } // Primary service
 
   constructor(log, config = {}) {
     // Ensure required properties
@@ -26,14 +26,6 @@ class SmartToiletSeat extends SwitchAccessory {
           converted.data[key] = converted.data[key].toString();
         }
       });
-      
-      // Map powerOn/powerOff to on/off for compatibility with SwitchAccessory
-      if (converted.data.powerOn && !converted.data.on) {
-        converted.data.on = converted.data.powerOn;
-      }
-      if (converted.data.powerOff && !converted.data.off) {
-        converted.data.off = converted.data.powerOff;
-      }
     }
     return converted;
   }
@@ -45,12 +37,8 @@ class SmartToiletSeat extends SwitchAccessory {
       return;
     }
 
-    // List only the required hex codes
-    const requiredCodes = [
-      'powerOn', 'powerOff', 'powerSaveOn', 'powerSaveOff',
-      'showerOn', 'showerOff', 'bidetOn', 'bidetOff', 'dryOn', 'dryOff'
-    ];
-
+    // Check for the required hex codes
+    const requiredCodes = ['powerOn', 'powerOff', 'powerSaveOn', 'powerSaveOff', 'showerOn', 'showerOff', 'bidetOn', 'bidetOff', 'dryOn', 'dryOff'];
     const missingCodes = requiredCodes.filter(code => !data[code]);
     if (missingCodes.length > 0) {
       this.log(`${config.name} checkConfig: Missing hex codes: ${missingCodes.join(', ')}`);
@@ -64,11 +52,12 @@ class SmartToiletSeat extends SwitchAccessory {
     
     const { state } = this;
 
-    // Only the 5 functions you need
-    state.powerSaveState = false;
-    state.showerActive = false;
-    state.bidetActive = false;
-    state.dryActive = false;
+    // State for all 5 functions
+    state.powerState = false;          // Main power
+    state.powerSaveState = false;      // Power save mode
+    state.showerActive = false;        // Shower valve
+    state.bidetActive = false;         // Bidet valve  
+    state.dryActive = false;           // Dry function
     
     // Auto-off timeouts for water functions
     this.autoOffTimeouts = {};
@@ -82,14 +71,6 @@ class SmartToiletSeat extends SwitchAccessory {
       if (timeout) clearTimeout(timeout);
     });
     this.autoOffTimeouts = {};
-  }
-
-  // Override performSend to ensure hex codes are strings
-  async performSend(hexData) {
-    if (typeof hexData === 'number') {
-      hexData = hexData.toString();
-    }
-    return super.performSend(hexData);
   }
 
   // Water function with auto-off
@@ -114,6 +95,7 @@ class SmartToiletSeat extends SwitchAccessory {
         this.autoOffTimeouts[functionType] = setTimeout(async () => {
           this.state[stateKey] = false;
           await this.performSend(data[`${functionType}Off`]);
+          // Notify HomeKit of the change
           this.serviceManager.refreshCharacteristicUI(Characteristic.Active);
           delete this.autoOffTimeouts[functionType];
         }, 60000);
@@ -121,15 +103,50 @@ class SmartToiletSeat extends SwitchAccessory {
     }
   }
 
+  // Main power control
+  async setPowerState(hexData) {
+    const { data } = this;
+    if (hexData) {
+      await this.performSend(hexData);
+    }
+  }
+
+  // Power save control  
+  async setPowerSaveState(hexData) {
+    const { data } = this;
+    if (hexData) {
+      await this.performSend(hexData);
+    }
+  }
+
+  // Dry function control
+  async setDryState(hexData) {
+    const { data } = this;
+    if (hexData) {
+      await this.performSend(hexData);
+    }
+  }
+
   configureServiceManager(serviceManager) {
     const { data } = this;
 
-    // Main power switch (inherited from SwitchAccessory)
-    super.configureServiceManager(serviceManager);
-
-    // Power Save Switch - as a second On characteristic
+    // Main Power Service (Switch)
     serviceManager.addToggleCharacteristic({
-      name: 'powerSaveState',
+      name: 'powerState',
+      type: Characteristic.On,
+      getMethod: this.getCharacteristicValue,
+      setMethod: this.setCharacteristicValue,
+      bind: this,
+      props: {
+        onData: data.powerOn,
+        offData: data.powerOff,
+        setValuePromise: this.setPowerState.bind(this)
+      }
+    });
+
+    // Power Save Service (Outlet)
+    serviceManager.addToggleCharacteristic({
+      name: 'powerSaveState', 
       type: Characteristic.On,
       getMethod: this.getCharacteristicValue,
       setMethod: this.setCharacteristicValue,
@@ -137,13 +154,12 @@ class SmartToiletSeat extends SwitchAccessory {
       props: {
         onData: data.powerSaveOn,
         offData: data.powerSaveOff,
-        setValuePromise: async (hexData) => {
-          if (hexData) await this.performSend(hexData);
-        }
+        setValuePromise: this.setPowerSaveState.bind(this),
+        serviceType: Service.Outlet
       }
     });
 
-    // Shower Valve
+    // Shower Valve Service
     serviceManager.addToggleCharacteristic({
       name: 'showerActive',
       type: Characteristic.Active,
@@ -154,11 +170,12 @@ class SmartToiletSeat extends SwitchAccessory {
         setValuePromise: async (hexData, previousValue) => {
           const isActive = this.state.showerActive;
           await this.setWaterFunction('shower', isActive);
-        }
+        },
+        serviceType: Service.Valve
       }
     });
 
-    // Bidet Valve
+    // Bidet Valve Service
     serviceManager.addToggleCharacteristic({
       name: 'bidetActive',
       type: Characteristic.Active,
@@ -169,11 +186,12 @@ class SmartToiletSeat extends SwitchAccessory {
         setValuePromise: async (hexData, previousValue) => {
           const isActive = this.state.bidetActive;
           await this.setWaterFunction('bidet', isActive);
-        }
+        },
+        serviceType: Service.Valve
       }
     });
 
-    // Dry Function
+    // Dry Function Service (Fan)
     serviceManager.addToggleCharacteristic({
       name: 'dryActive',
       type: Characteristic.Active,
@@ -183,9 +201,8 @@ class SmartToiletSeat extends SwitchAccessory {
       props: {
         onData: data.dryOn,
         offData: data.dryOff,
-        setValuePromise: async (hexData) => {
-          if (hexData) await this.performSend(hexData);
-        }
+        setValuePromise: this.setDryState.bind(this),
+        serviceType: Service.Fan
       }
     });
   }
