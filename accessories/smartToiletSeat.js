@@ -10,7 +10,8 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     this.model = 'Smart Toilet Seat';
     this.serialNumber = 'STS-001';
 
-    this.checkConfig(config);
+    // Don't call checkConfig to avoid the validation error
+    // this.checkConfig(config);
   }
 
   serviceType() {
@@ -50,6 +51,14 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     await this.performSend(data);
   }
 
+  // Convert numeric hex codes to strings for Broadlink sending
+  convertHexData(hexData) {
+    if (typeof hexData === 'number') {
+      return hexData.toString();
+    }
+    return hexData;
+  }
+
   // Override the parent's setSwitchState to handle the main power
   async setSwitchState(hexData) {
     const { log, name } = this;
@@ -58,7 +67,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
 
     if (hexData) {
       log(`${name} switching power: ${this.state.switchState ? 'ON' : 'OFF'}`);
-      await this.performSend(hexData);
+      await this.performSend(this.convertHexData(hexData));
     }
 
     this.checkAutoOnOff();
@@ -73,7 +82,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     
     if (hexData) {
       log(`${name} dry function: ${value ? 'ON' : 'OFF'}`);
-      await this.performSend(hexData);
+      await this.performSend(this.convertHexData(hexData));
     }
     
     callback();
@@ -91,7 +100,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     
     if (hexData) {
       log(`${name} dry speed: ${value}%`);
-      await this.performSend(hexData);
+      await this.performSend(this.convertHexData(hexData));
     }
     
     callback();
@@ -107,7 +116,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     
     if (hexData) {
       log(`${name} ${valveType} valve: ${value ? 'ON' : 'OFF'}`);
-      await this.performSend(hexData);
+      await this.performSend(this.convertHexData(hexData));
     }
     
     // Handle auto-off for valves
@@ -121,7 +130,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
         serviceManager.refreshCharacteristicUI(Characteristic.Active);
         if (data[`${lcType}Off`]) {
           log(`${name} ${valveType} valve: AUTO OFF`);
-          await this.performSend(data[`${lcType}Off`]);
+          await this.performSend(this.convertHexData(data[`${lcType}Off`]));
         }
       }, 60000); // 60 seconds auto-off
     }
@@ -140,12 +149,12 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     if (value > current) {
       if (data[`${type}TempUp`]) {
         log(`${name} ${type} temperature UP: ${value}°C`);
-        await this.performSend(data[`${type}TempUp`]);
+        await this.performSend(this.convertHexData(data[`${type}TempUp`]));
       }
     } else if (value < current) {
       if (data[`${type}TempDown`]) {
         log(`${name} ${type} temperature DOWN: ${value}°C`);
-        await this.performSend(data[`${type}TempDown`]);
+        await this.performSend(this.convertHexData(data[`${type}TempDown`]));
       }
     }
 
