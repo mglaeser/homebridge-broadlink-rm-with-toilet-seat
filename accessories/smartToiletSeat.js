@@ -45,17 +45,17 @@ class SmartToiletSeat extends SwitchAccessory {
       return;
     }
 
-    // List expected hex codes
-    const expectedCodes = [
+    // List only the required hex codes
+    const requiredCodes = [
       'powerOn', 'powerOff', 'powerSaveOn', 'powerSaveOff',
-      'dryOn', 'dryOff', 'rotationSpeedLow', 'rotationSpeedMedium', 'rotationSpeedHigh',
-      'showerOn', 'showerOff', 'bidetOn', 'bidetOff', 'massageOn', 'massageOff',
-      'seatTempUp', 'seatTempDown', 'showerTempUp', 'showerTempDown'
+      'showerOn', 'showerOff', 'bidetOn', 'bidetOff', 'dryOn', 'dryOff'
     ];
 
-    const missingCodes = expectedCodes.filter(code => !data[code]);
+    const missingCodes = requiredCodes.filter(code => !data[code]);
     if (missingCodes.length > 0) {
       this.log(`${config.name} checkConfig: Missing hex codes: ${missingCodes.join(', ')}`);
+    } else {
+      this.log(`${config.name} checkConfig: All required hex codes found`);
     }
   }
 
@@ -64,29 +64,12 @@ class SmartToiletSeat extends SwitchAccessory {
     
     const { state } = this;
 
-    // Main power states
-    state.switchState = false;
+    // Only the 5 functions you need
     state.powerSaveState = false;
-    
-    // Dry function states
+    state.showerActive = false;
+    state.bidetActive = false;
     state.dryActive = false;
-    state.dryRotationSpeed = 0;
     
-    // Water function states (valves)
-    state.valveShowerActive = false;
-    state.valveBidetActive = false;
-    state.valveMassageActive = false;
-    
-    // Temperature states
-    state.seatCurrentTemperature = 25;
-    state.seatTargetTemperature = 25;
-    state.showerCurrentTemperature = 25;
-    state.showerTargetTemperature = 25;
-    
-    // Temperature display units (0 = Celsius)
-    state.seatDisplayUnits = 0;
-    state.showerDisplayUnits = 0;
-
     // Auto-off timeouts for water functions
     this.autoOffTimeouts = {};
   }
@@ -109,37 +92,11 @@ class SmartToiletSeat extends SwitchAccessory {
     return super.performSend(hexData);
   }
 
-  // Temperature control helper
-  async adjustTemperature(type, direction) {
-    const { data } = this;
-    const tempKey = `${type}TargetTemperature`;
-    const currentKey = `${type}CurrentTemperature`;
-    const hexKey = `${type}Temp${direction === 'up' ? 'Up' : 'Down'}`;
-    
-    if (data[hexKey]) {
-      await this.performSend(data[hexKey]);
-      
-      // Simulate temperature change
-      const change = direction === 'up' ? 1 : -1;
-      const newTemp = Math.max(10, Math.min(50, this.state[tempKey] + change));
-      this.state[tempKey] = newTemp;
-      this.state[currentKey] = newTemp;
-      
-      // Update UI
-      this.serviceManager.refreshCharacteristicUI(
-        type === 'seat' ? 'SeatTargetTemperature' : 'ShowerTargetTemperature'
-      );
-      this.serviceManager.refreshCharacteristicUI(
-        type === 'seat' ? 'SeatCurrentTemperature' : 'ShowerCurrentTemperature'
-      );
-    }
-  }
-
   // Water function with auto-off
   async setWaterFunction(functionType, active) {
     const { data, log, name } = this;
-    const stateKey = `valve${functionType}Active`;
-    const hexKey = `${functionType.toLowerCase()}${active ? 'On' : 'Off'}`;
+    const stateKey = `${functionType}Active`;
+    const hexKey = `${functionType}${active ? 'On' : 'Off'}`;
     
     if (data[hexKey]) {
       await this.performSend(data[hexKey]);
@@ -156,40 +113,21 @@ class SmartToiletSeat extends SwitchAccessory {
         log(`${name} ${functionType}: Auto-off in 60 seconds`);
         this.autoOffTimeouts[functionType] = setTimeout(async () => {
           this.state[stateKey] = false;
-          await this.performSend(data[`${functionType.toLowerCase()}Off`]);
-          this.serviceManager.refreshCharacteristicUI(`Valve${functionType}Active`);
+          await this.performSend(data[`${functionType}Off`]);
+          this.serviceManager.refreshCharacteristicUI(Characteristic.Active);
           delete this.autoOffTimeouts[functionType];
         }, 60000);
       }
     }
   }
 
-  // Dry rotation speed control
-  async setDryRotationSpeed(speed) {
-    const { data } = this;
-    let hexKey;
-    
-    if (speed <= 33) {
-      hexKey = 'rotationSpeedLow';
-    } else if (speed <= 66) {
-      hexKey = 'rotationSpeedMedium';
-    } else {
-      hexKey = 'rotationSpeedHigh';
-    }
-    
-    if (data[hexKey]) {
-      await this.performSend(data[hexKey]);
-      this.state.dryRotationSpeed = speed;
-    }
-  }
-
   configureServiceManager(serviceManager) {
     const { data } = this;
 
-    // Main power switch (inherits from SwitchAccessory)
+    // Main power switch (inherited from SwitchAccessory)
     super.configureServiceManager(serviceManager);
 
-    // Power Save Switch
+    // Power Save Switch - as a second On characteristic
     serviceManager.addToggleCharacteristic({
       name: 'powerSaveState',
       type: Characteristic.On,
@@ -205,7 +143,37 @@ class SmartToiletSeat extends SwitchAccessory {
       }
     });
 
-    // Dry Function Active
+    // Shower Valve
+    serviceManager.addToggleCharacteristic({
+      name: 'showerActive',
+      type: Characteristic.Active,
+      getMethod: this.getCharacteristicValue,
+      setMethod: this.setCharacteristicValue,
+      bind: this,
+      props: {
+        setValuePromise: async (hexData, previousValue) => {
+          const isActive = this.state.showerActive;
+          await this.setWaterFunction('shower', isActive);
+        }
+      }
+    });
+
+    // Bidet Valve
+    serviceManager.addToggleCharacteristic({
+      name: 'bidetActive',
+      type: Characteristic.Active,
+      getMethod: this.getCharacteristicValue,
+      setMethod: this.setCharacteristicValue,
+      bind: this,
+      props: {
+        setValuePromise: async (hexData, previousValue) => {
+          const isActive = this.state.bidetActive;
+          await this.setWaterFunction('bidet', isActive);
+        }
+      }
+    });
+
+    // Dry Function
     serviceManager.addToggleCharacteristic({
       name: 'dryActive',
       type: Characteristic.Active,
@@ -219,93 +187,6 @@ class SmartToiletSeat extends SwitchAccessory {
           if (hexData) await this.performSend(hexData);
         }
       }
-    });
-
-    // Dry Rotation Speed
-    if (data.rotationSpeedLow || data.rotationSpeedMedium || data.rotationSpeedHigh) {
-      serviceManager.addToggleCharacteristic({
-        name: 'dryRotationSpeed',
-        type: Characteristic.RotationSpeed,
-        getMethod: this.getCharacteristicValue,
-        setMethod: this.setCharacteristicValue,
-        bind: this,
-        props: {
-          setValuePromise: this.setDryRotationSpeed.bind(this)
-        }
-      });
-    }
-
-    // Water Functions (Shower, Bidet, Massage)
-    ['Shower', 'Bidet', 'Massage'].forEach((functionType) => {
-      const stateKey = `valve${functionType}Active`;
-      
-      serviceManager.addToggleCharacteristic({
-        name: stateKey,
-        type: Characteristic.Active,
-        getMethod: this.getCharacteristicValue,
-        setMethod: this.setCharacteristicValue,
-        bind: this,
-        props: {
-          setValuePromise: async (hexData, previousValue) => {
-            const isActive = this.state[stateKey];
-            await this.setWaterFunction(functionType, isActive);
-          }
-        }
-      });
-    });
-
-    // Temperature Controls
-    ['seat', 'shower'].forEach(type => {
-      const currentTempKey = `${type}CurrentTemperature`;
-      const targetTempKey = `${type}TargetTemperature`;
-      const displayUnitsKey = `${type}DisplayUnits`;
-
-      // Current Temperature (read-only)
-      serviceManager.addToggleCharacteristic({
-        name: currentTempKey,
-        type: Characteristic.CurrentTemperature,
-        getMethod: this.getCharacteristicValue,
-        setMethod: this.setCharacteristicValue,
-        bind: this,
-        props: {
-          minValue: 10,
-          maxValue: 50,
-          minStep: 0.5
-        }
-      });
-
-      // Target Temperature (controllable)
-      serviceManager.addToggleCharacteristic({
-        name: targetTempKey,
-        type: Characteristic.TargetTemperature,
-        getMethod: this.getCharacteristicValue,
-        setMethod: this.setCharacteristicValue,
-        bind: this,
-        props: {
-          minValue: 10,
-          maxValue: 50,
-          minStep: 1,
-          setValuePromise: async (hexData, previousValue) => {
-            const currentTemp = this.state[currentTempKey];
-            const targetTemp = this.state[targetTempKey];
-
-            if (targetTemp > currentTemp) {
-              await this.adjustTemperature(type, 'up');
-            } else if (targetTemp < currentTemp) {
-              await this.adjustTemperature(type, 'down');
-            }
-          }
-        }
-      });
-
-      // Temperature Display Units
-      serviceManager.addToggleCharacteristic({
-        name: displayUnitsKey,
-        type: Characteristic.TemperatureDisplayUnits,
-        getMethod: (callback) => callback(null, 0), // 0 = Celsius
-        setMethod: (value, callback) => callback(),
-        bind: this
-      });
     });
   }
 }
