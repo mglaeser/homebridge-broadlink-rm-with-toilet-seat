@@ -87,6 +87,15 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     const { data } = config;
     const services = [];
 
+    // Get service names from config with fallbacks
+    const serviceNames = {
+      power: config.powerName || 'Power',
+      powerSave: config.powerSaveName || 'Power Save', 
+      shower: config.showerName || 'Shower',
+      bidet: config.bidetName || 'Bidet',
+      dry: config.dryName || 'Dry'
+    };
+
     const accessoryInformation = new Service.AccessoryInformation();
     accessoryInformation
       .setCharacteristic(Characteristic.Manufacturer, 'Smart Toilet')
@@ -95,7 +104,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     services.push(accessoryInformation);
 
     // 1. Power
-    const powerService = new Service.Switch('Eingeschaltet', 'power');
+    const powerService = new Service.Switch(serviceNames.power, 'power');
     powerService.setPrimaryService(true);
     powerService.getCharacteristic(Characteristic.On)
       .onGet(() => {
@@ -110,8 +119,8 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       });
     services.push(powerService);
 
-    // 2. Energiesparmodus
-    const powerSaveService = new Service.Outlet('Power-Save', 'powersave');
+    // 2. Power Save
+    const powerSaveService = new Service.Outlet(serviceNames.powerSave, 'powersave');
     powerSaveService.getCharacteristic(Characteristic.On)
       .onGet(() => this.toiletState.powerSaveState)
       .onSet(async (value) => {
@@ -124,8 +133,8 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       .onGet(() => this.toiletState.powerSaveState);
     services.push(powerSaveService);
 
-    // 3. Dusche
-    const showerService = new Service.Valve('Dusche', 'shower');
+    // 3. Shower
+    const showerService = new Service.Valve(serviceNames.shower, 'shower');
     showerService.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.SHOWER);
     showerService.getCharacteristic(Characteristic.Active)
       .onGet(() => this.toiletState.showerActive ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE)
@@ -139,7 +148,7 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     services.push(showerService);
 
     // 4. Bidet
-    const bidetService = new Service.Valve('Bidet', 'bidet');
+    const bidetService = new Service.Valve(serviceNames.bidet, 'bidet');
     bidetService.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.SHOWER);
     bidetService.getCharacteristic(Characteristic.Active)
       .onGet(() => this.toiletState.bidetActive ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE)
@@ -152,8 +161,8 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
       .onGet(() => this.toiletState.bidetActive ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
     services.push(bidetService);
 
-    // 5. Trockner
-    const dryService = new Service.Fan('Trocknen', 'dry');
+    // 5. Dry
+    const dryService = new Service.Fan(serviceNames.dry, 'dry');
     dryService.getCharacteristic(Characteristic.On)
       .onGet(() => this.toiletState.dryActive)
       .onSet(async (value) => {
@@ -172,6 +181,11 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     services.push(dryService);
 
     return services;
+  }
+
+  // Required by homebridge-platform-helper but not used since we override getServices
+  configureServiceManager(serviceManager) {
+    // Empty - we use getServices() instead
   }
 
   destroy() {
