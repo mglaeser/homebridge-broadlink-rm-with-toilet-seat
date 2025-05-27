@@ -1,4 +1,3 @@
-const { Service, Characteristic } = require('hap-nodejs');
 const BroadlinkRMAccessory = require('./accessory');
 
 class SmartToiletSeat extends BroadlinkRMAccessory {
