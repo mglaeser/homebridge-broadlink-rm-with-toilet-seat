@@ -14,16 +14,10 @@
     "node": ">=7.6.0",
     "homebridge": ">=0.2.0"
   },
-  "author": {
-    "name": "homebridge-toilet-seat"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git@github.com:your-username/homebridge-toilet-seat.git"
-  },
   "dependencies": {
     "broadlinkjs-rm": "^0.7.6",
     "homebridge-platform-helper": "lprhodes/homebridge-platform-helper#feature/typescript",
+    "hap-nodejs": "^0.11.1",
     "uuid": "^3.3.3"
   }
 }
