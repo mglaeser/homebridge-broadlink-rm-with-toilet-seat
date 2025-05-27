@@ -105,6 +105,11 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     // 1. Power
     const powerService = new Service.Switch(serviceNames.power, 'power');
     powerService.setPrimaryService(true);
+    
+    // Add ConfiguredName for iOS 16+ fix
+    powerService.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    powerService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.power);
+    
     powerService.getCharacteristic(Characteristic.On)
       .onGet(() => {
         log(`${name} getPowerState: ${this.state.switchState}`);
@@ -120,6 +125,11 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
 
     // 2. Power Save
     const powerSaveService = new Service.Outlet(serviceNames.powerSave, 'powersave');
+    
+    // Add ConfiguredName for iOS 16+ fix
+    powerSaveService.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    powerSaveService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.powerSave);
+    
     powerSaveService.getCharacteristic(Characteristic.On)
       .onGet(() => this.toiletState.powerSaveState)
       .onSet(async (value) => {
@@ -135,6 +145,11 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     // 3. Shower
     const showerService = new Service.Valve(serviceNames.shower, 'shower');
     showerService.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.SHOWER);
+    
+    // Add ConfiguredName for iOS 16+ fix
+    showerService.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    showerService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.shower);
+    
     showerService.getCharacteristic(Characteristic.Active)
       .onGet(() => this.toiletState.showerActive ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE)
       .onSet(async (value) => {
@@ -149,6 +164,11 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
     // 4. Bidet
     const bidetService = new Service.Valve(serviceNames.bidet, 'bidet');
     bidetService.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.SHOWER);
+    
+    // Add ConfiguredName for iOS 16+ fix
+    bidetService.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    bidetService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.bidet);
+    
     bidetService.getCharacteristic(Characteristic.Active)
       .onGet(() => this.toiletState.bidetActive ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE)
       .onSet(async (value) => {
@@ -162,6 +182,11 @@ class SmartToiletSeat extends BroadlinkRMAccessory {
 
     // 5. Dry
     const dryService = new Service.Fan(serviceNames.dry, 'dry');
+    
+    // Add ConfiguredName for iOS 16+ fix
+    dryService.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    dryService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.dry);
+    
     dryService.getCharacteristic(Characteristic.On)
       .onGet(() => this.toiletState.dryActive)
       .onSet(async (value) => {
