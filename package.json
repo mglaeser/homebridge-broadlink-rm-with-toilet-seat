@@ -1,45 +1,29 @@
 {
-  "name": "homebridge-broadlink-rm-toilet-seat",
-  "version": "3.6.22",
-  "description": "Broadlink RM plugin (including the mini and pro) for homebridge: https://github.com/nfarina/homebridge extended by smart toilet seats",
-  "main": "index.js",
+  "name": "homebridge-toilet-seat",
+  "version": "1.0.0",
+  "description": "Smart toilet seat plugin for homebridge with IR control via Broadlink devices",
   "license": "ISC",
-  "scripts": {
-    "release": "release-it"
-  },
   "keywords": [
     "homebridge-plugin",
+    "toilet-seat",
+    "smart-toilet",
     "broadlink",
-    "rm pro 3",
-    "rm mini 3"
+    "infrared"
   ],
   "engines": {
     "node": ">=7.6.0",
     "homebridge": ">=0.2.0"
   },
   "author": {
-    "name": "lprhodes"
+    "name": "homebridge-toilet-seat"
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:lprhodes/homebridge-broadlink-rm.git"
+    "url": "git@github.com:your-username/homebridge-toilet-seat.git"
   },
   "dependencies": {
     "broadlinkjs-rm": "^0.7.6",
-    "chai": "^4.2.0",
-    "find-key": "^2.0.1",
-    "github-version-checker": "^1.2.0",
     "homebridge-platform-helper": "lprhodes/homebridge-platform-helper#feature/typescript",
-    "net-ping": "^1.2.3",
-    "ping": "^0.2.2",
     "uuid": "^3.3.3"
-  },
-  "peerDependencies": {
-    "homebridge": ">=1.3.0",
-    "hap-nodejs": ">=0.9.0"
-  },
-  "devDependencies": {
-    "mocha": "^6.2.2",
-    "release-it": "^12.4.3"
   }
 }

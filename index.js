@@ -1,10 +1,10 @@
-const BroadlinkRMPlatform = require('./platform')
+const ToiletSeatPlatform = require('./platform')
 
 module.exports = (homebridge) => {
   global.Service = homebridge.hap.Service;
   global.Characteristic = homebridge.hap.Characteristic;
 
-  BroadlinkRMPlatform.setHomebridge(homebridge);
+  ToiletSeatPlatform.setHomebridge(homebridge);
 
-  homebridge.registerPlatform("homebridge-broadlink-rm-toilet-seat", "BroadlinkRM-Toilet", BroadlinkRMPlatform);
+  homebridge.registerPlatform("homebridge-toilet-seat", "IR-Toilet-Seat", ToiletSeatPlatform);
 }
