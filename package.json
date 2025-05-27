@@ -16,7 +16,12 @@
   },
   "dependencies": {
     "broadlinkjs-rm": "^0.7.6",
+    "chai": "^4.2.0",
     "homebridge-platform-helper": "lprhodes/homebridge-platform-helper#feature/typescript",
     "uuid": "^3.3.3"
+  },
+  "peerDependencies": {
+    "homebridge": ">=1.3.0",
+    "hap-nodejs": ">=0.9.0"
   }
 }

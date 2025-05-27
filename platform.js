@@ -3,6 +3,7 @@ const { HomebridgePlatform } = require('homebridge-platform-helper');
 const npmPackage = require('./package.json');
 const Accessory = require('./accessories');
 const broadlink = require('./helpers/broadlink');
+const { assert } = require('chai');  // <-- ADD THIS LINE
 const { discoverDevices } = require('./helpers/getDevice');
 
 const classTypes = {
