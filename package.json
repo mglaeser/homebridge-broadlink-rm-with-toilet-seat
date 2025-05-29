@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Smart Toilet Seat plugin for Homebridge with IR control via Broadlink RM devices",
   "license": "ISC",
+  "main": "index.js",
   "scripts": {
     "release": "release-it",
     "lint": "eslint -c .eslintrc.json --ignore-pattern=\"node_modules\" --ext js .",
@@ -15,20 +16,25 @@
     "toilet-seat",
     "broadlink",
     "IR",
-    "bathroom"
+    "bathroom",
+    "smart-home",
+    "homekit"
   ],
   "engines": {
     "node": ">=7.6.0",
     "homebridge": "^1.4.1 || ^2.0.0-beta.0"
   },
   "author": {
-    "name": "kiwi-cam"
+    "name": "mglaeser"
   },
-  "funding": "https://paypal.me/kiwicamRM",
   "repository": {
     "type": "git",
-    "url": "git@github.com:your-username/homebridge-smart-toilet-seat.git"
+    "url": "git+https://github.com/your-username/homebridge-smart-toilet-seat.git"
   },
+  "bugs": {
+    "url": "https://github.com/your-username/homebridge-smart-toilet-seat/issues"
+  },
+  "homepage": "https://github.com/your-username/homebridge-smart-toilet-seat#readme",
   "dependencies": {
     "await-semaphore": "^0.1.3",
     "kiwicam-broadlinkjs-rm": "^0.9.22",

@@ -9,5 +9,6 @@ module.exports = (homebridge) => {
 
   BroadlinkRMPlatform.setHomebridge(homebridge);
 
-  homebridge.registerPlatform("homebridge-broadlink-rm", "BroadlinkRM", BroadlinkRMPlatform);
+  // Register the Smart Toilet Seat platform
+  homebridge.registerPlatform("homebridge-smart-toilet-seat", "SmartToiletSeat", BroadlinkRMPlatform);
 }

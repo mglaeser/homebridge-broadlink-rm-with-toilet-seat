@@ -20,14 +20,15 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     };
 
     this.waterFunctionTimeouts = {};
+    this.additionalServices = [];
   }
 
   setDefaults() {
+    super.setDefaults();
     const { config } = this;
     
     // Set default auto-off duration for water functions
     config.waterFunctionDuration = config.waterFunctionDuration || 60;
-    // Fixed: Clean logic for dry function duration
     config.dryFunctionDuration = config.dryDuration || 60;
   }
 
@@ -42,7 +43,9 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
           delete this.waterFunctionTimeouts[key];
         }
       } catch (error) {
-        this.log(`Error clearing timeout for ${key}: ${error.message}`);
+        if (this.logLevel <= 4) {
+          this.log(`Error clearing timeout for ${key}: ${error.message}`);
+        }
       }
     });
   }
@@ -127,10 +130,10 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
                 await this.performSend(offHexData);
               }
               
-              // Update service characteristic safely
-              const serviceManager = this.serviceManagers[functionType];
-              if (serviceManager && serviceManager.setCharacteristic) {
-                serviceManager.setCharacteristic(Characteristic.On, false);
+              // Update the correct service characteristic
+              const service = this.additionalServices.find(s => s.displayName.toLowerCase().includes(functionType));
+              if (service) {
+                service.getCharacteristic(Characteristic.On).updateValue(false);
               }
               
               delete this.waterFunctionTimeouts[functionType];
@@ -142,7 +145,6 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
               if (logLevel <= 4) {
                 log(`${name} ${functionType} auto-off error: ${timeoutError.message}`);
               }
-              // Clean up timeout reference even if error occurs
               delete this.waterFunctionTimeouts[functionType];
             }
           }, duration * 1000);
@@ -195,9 +197,10 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
                 await this.performSend(offHexData);
               }
               
-              // Update service characteristic safely
-              if (this.serviceManagers.dry && this.serviceManagers.dry.setCharacteristic) {
-                this.serviceManagers.dry.setCharacteristic(Characteristic.On, false);
+              // Update the correct service characteristic
+              const service = this.additionalServices.find(s => s.displayName.toLowerCase().includes('dry'));
+              if (service) {
+                service.getCharacteristic(Characteristic.On).updateValue(false);
               }
               
               delete this.waterFunctionTimeouts.dry;
@@ -209,7 +212,6 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
               if (logLevel <= 4) {
                 log(`${name} Dry auto-off error: ${timeoutError.message}`);
               }
-              // Clean up timeout reference even if error occurs
               delete this.waterFunctionTimeouts.dry;
             }
           }, duration * 1000);
@@ -240,26 +242,26 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     callback(null, this.toiletState.dryActive);
   }
 
-  // Improved getServices method with error handling
+  // Fixed getServices method - properly returns all services
   getServices() {
     const services = this.getInformationServices();
     
     try {
-      // Add primary service
+      // Add primary service (main power switch)
       if (this.serviceManager && this.serviceManager.service) {
         services.push(this.serviceManager.service);
       }
       
-      // Add secondary services safely
-      if (this.serviceManagers) {
-        Object.values(this.serviceManagers).forEach(serviceManager => {
-          if (serviceManager && serviceManager.service) {
-            services.push(serviceManager.service);
-          }
-        });
-      }
+      // Add all additional services
+      this.additionalServices.forEach(service => {
+        if (service) {
+          services.push(service);
+        }
+      });
     } catch (error) {
-      this.log(`Error getting services: ${error.message}`);
+      if (this.logLevel <= 4) {
+        this.log(`Error getting services: ${error.message}`);
+      }
     }
     
     return services;
@@ -273,7 +275,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
       if (logLevel <= 4) {
         log(`${name} Error: No data configuration provided`);
       }
-      return;
+      throw new Error(`${name}: No data configuration provided`);
     }
 
     const { 
@@ -283,22 +285,31 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     } = data;
 
     // Validate required hex codes
-    const requiredCodes = [
-      'powerOn', 'powerOff', 'powerSaveOn', 'powerSaveOff',
-      'showerOn', 'showerOff', 'bidetOn', 'bidetOff',
-      'dryOn', 'dryOff'
-    ];
+    const requiredCodes = {
+      powerOn: 'Main power on',
+      powerOff: 'Main power off', 
+      powerSaveOn: 'Power save on',
+      powerSaveOff: 'Power save off',
+      showerOn: 'Shower on',
+      showerOff: 'Shower off',
+      bidetOn: 'Bidet on', 
+      bidetOff: 'Bidet off',
+      dryOn: 'Dry on',
+      dryOff: 'Dry off'
+    };
     
-    const missingCodes = requiredCodes.filter(code => !data[code]);
-    if (missingCodes.length > 0 && logLevel <= 3) {
-      log(`${name} Warning: Missing hex codes: ${missingCodes.join(', ')}`);
+    const missingCodes = Object.keys(requiredCodes).filter(code => !data[code]);
+    if (missingCodes.length > 0) {
+      const missing = missingCodes.map(code => requiredCodes[code]).join(', ');
+      const message = `${name}: Missing required hex codes: ${missing}`;
+      if (logLevel <= 4) {
+        log(message);
+      }
+      throw new Error(message);
     }
 
     try {
-      // Create service managers object to hold multiple services
-      this.serviceManagers = {};
-
-      // 1. Main Power Switch (Primary Service)
+      // 1. Main Power Switch (Primary Service) - uses parent's serviceManager
       this.serviceManager = new ServiceManagerTypes[serviceManagerType](name, Service.Switch, this.log);
       
       this.serviceManager.addToggleCharacteristic({
@@ -314,81 +325,56 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         }
       });
 
-      // 2. Power Save Switch
+      // 2. Create additional services as regular HomeKit services
+      this.additionalServices = [];
+
+      // Power Save Switch
       const powerSaveName = config.powerSaveName || 'Power Save';
-      this.serviceManagers.powerSave = new ServiceManagerTypes[serviceManagerType](
-        powerSaveName, Service.Switch, this.log
-      );
-      
-      this.serviceManagers.powerSave.addToggleCharacteristic({
-        name: 'powerSaveState',
-        type: Characteristic.On,
-        getMethod: this.getPowerSaveState.bind(this),
-        setMethod: this.setCharacteristicValue,
-        bind: this,
-        props: {
-          onData: powerSaveOn,
-          offData: powerSaveOff,
-          setValuePromise: this.setPowerSaveState.bind(this)
-        }
-      });
+      const powerSaveService = new Service.Switch(powerSaveName, 'powerSave');
+      powerSaveService.getCharacteristic(Characteristic.On)
+        .onGet(this.getPowerSaveState.bind(this))
+        .onSet(async (value) => {
+          const hexData = value ? powerSaveOn : powerSaveOff;
+          await this.setPowerSaveState(hexData, !value);
+        });
+      this.additionalServices.push(powerSaveService);
 
-      // 3. Shower Switch
+      // Shower Switch  
       const showerName = config.showerName || 'Shower';
-      this.serviceManagers.shower = new ServiceManagerTypes[serviceManagerType](
-        showerName, Service.Switch, this.log
-      );
-      
-      this.serviceManagers.shower.addToggleCharacteristic({
-        name: 'showerState',
-        type: Characteristic.On,
-        getMethod: this.getShowerState.bind(this),
-        setMethod: this.setCharacteristicValue,
-        bind: this,
-        props: {
-          onData: showerOn,
-          offData: showerOff,
-          setValuePromise: (hexData, previousValue) => this.setWaterFunction('shower', hexData, previousValue)
-        }
-      });
+      const showerService = new Service.Switch(showerName, 'shower');
+      showerService.getCharacteristic(Characteristic.On)
+        .onGet(this.getShowerState.bind(this))
+        .onSet(async (value) => {
+          const hexData = value ? showerOn : showerOff;
+          await this.setWaterFunction('shower', hexData, !value);
+        });
+      this.additionalServices.push(showerService);
 
-      // 4. Bidet Switch
+      // Bidet Switch
       const bidetName = config.bidetName || 'Bidet';
-      this.serviceManagers.bidet = new ServiceManagerTypes[serviceManagerType](
-        bidetName, Service.Switch, this.log
-      );
-      
-      this.serviceManagers.bidet.addToggleCharacteristic({
-        name: 'bidetState',
-        type: Characteristic.On,
-        getMethod: this.getBidetState.bind(this),
-        setMethod: this.setCharacteristicValue,
-        bind: this,
-        props: {
-          onData: bidetOn,
-          offData: bidetOff,
-          setValuePromise: (hexData, previousValue) => this.setWaterFunction('bidet', hexData, previousValue)
-        }
-      });
+      const bidetService = new Service.Switch(bidetName, 'bidet');
+      bidetService.getCharacteristic(Characteristic.On)
+        .onGet(this.getBidetState.bind(this))
+        .onSet(async (value) => {
+          const hexData = value ? bidetOn : bidetOff;
+          await this.setWaterFunction('bidet', hexData, !value);
+        });
+      this.additionalServices.push(bidetService);
 
-      // 5. Dry Fan
+      // Dry Fan
       const dryName = config.dryName || 'Dry';
-      this.serviceManagers.dry = new ServiceManagerTypes[serviceManagerType](
-        dryName, Service.Fan, this.log
-      );
-      
-      this.serviceManagers.dry.addToggleCharacteristic({
-        name: 'dryState',
-        type: Characteristic.On,
-        getMethod: this.getDryState.bind(this),
-        setMethod: this.setCharacteristicValue,
-        bind: this,
-        props: {
-          onData: dryOn,
-          offData: dryOff,
-          setValuePromise: this.setDryState.bind(this)
-        }
-      });
+      const dryService = new Service.Fan(dryName, 'dry');
+      dryService.getCharacteristic(Characteristic.On)
+        .onGet(this.getDryState.bind(this))
+        .onSet(async (value) => {
+          const hexData = value ? dryOn : dryOff;
+          await this.setDryState(hexData, !value);
+        });
+      this.additionalServices.push(dryService);
+
+      if (logLevel <= 2) {
+        log(`${name}: Successfully configured with ${this.additionalServices.length + 1} services`);
+      }
 
     } catch (error) {
       if (logLevel <= 4) {
