@@ -1,38 +1,96 @@
-# Homebridge Broadlink RM Pro
+# Smart Toilet Seat for Homebridge
 
-## Introduction
-Welcome to the Broadlink RM Mini and Broadlink RM Pro plugin for [Homebridge](https://github.com/nfarina/homebridge).
+Control your smart toilet seat with HomeKit using Broadlink RM devices.
 
-This plugin allows you to control your RM Mini and RM Pro with HomeKit using the Home app and Siri.
+## Features
 
-## Like this plugin?
-
-If you like this plugin and want to show your support then please star the Github repo, or better yet; buy me a drink using [Paypal](https://paypal.me/kiwicamRM).
-
-Thank you!
+- **Main Power Control**: Turn your toilet seat on/off
+- **Power Save Mode**: Enable/disable power saving mode  
+- **Shower Function**: Control the shower/wash function with auto-off
+- **Bidet Function**: Control the bidet function with auto-off
+- **Dry Function**: Control the air dryer with auto-off
+- **Learn IR Codes**: Built-in learning functionality for IR codes
 
 ## Installation
 
-This plugin can be added via the Web interface, or if you perfer the terminal:
-   `npm install -g homebridge-broadlink-rm-pro`
-For more information, refer to the [documentation](https://broadlink.kiwicam.nz/#installation).
+```bash
+npm install -g homebridge-smart-toilet-seat
+```
 
-## Documentation
+## Configuration
 
-**Documentation can be found [here](https://broadlink.kiwicam.nz).** If you have any trouble after reading through the information please raise an issue and we'll help out as best we can.
+Add the following to your Homebridge config.json:
 
-If the plugin is unable to discover your device, it's likely you've locked the device with the cloud so it no longer accepts local connections. In this case, follow these steps:
-1. Open the [Broadlink app](https://apps.apple.com/us/app/broadlink/id1450257910)
-2. From the Home screen, tap on your Broadlink device
-3. Tap the ... in the top right
-4. Scroll down and toggle "Lock device" to Off
-5. Tap OK when prompted "Confirm to unlock the device"
+```json
+{
+    "platforms": [{
+        "platform": "BroadlinkRM",
+        "name": "Smart Toilet Seat",
+        "hosts": [
+            {
+                "isRM4": true,
+                "address": "192.168.1.100",
+                "mac": "xx:xx:xx:xx:xx:xx"
+            }
+        ],
+        "accessories": [
+            {
+                "name": "Smart Toilet",
+                "type": "smart-toilet-seat",
+                "waterFunctionDuration": 45,
+                "dryDuration": 60,
+                "bidetName": "Bidet",
+                "showerName": "Shower",
+                "dryName": "Dry",
+                "powerSaveName": "Power Save",
+                "data": {
+                    "powerOn": "HEX_CODE_HERE",
+                    "powerOff": "HEX_CODE_HERE",
+                    "powerSaveOn": "HEX_CODE_HERE",
+                    "powerSaveOff": "HEX_CODE_HERE",
+                    "showerOn": "HEX_CODE_HERE",
+                    "showerOff": "HEX_CODE_HERE",
+                    "bidetOn": "HEX_CODE_HERE",
+                    "bidetOff": "HEX_CODE_HERE",
+                    "dryOn": "HEX_CODE_HERE",
+                    "dryOff": "HEX_CODE_HERE"
+                }
+            }
+        ]
+    }]
+}
+```
 
-<img src="https://i.imgur.com/DMTUbDo.png" width="40%" height="40%">
+## Learning IR Codes
 
-This plugin should now be able to discover your device.
+1. The plugin automatically adds a "Learn" switch to HomeKit
+2. Turn on the Learn switch
+3. Point your toilet remote at the Broadlink device and press the button
+4. The hex code will appear in the Homebridge logs
+5. Copy the hex code to your config
 
-## Thanks
-Original: Thanks to @tattn (https://github.com/tattn/homebridge-rm-mini3), @PJCzx (https://github.com/PJCzx/homebridge-thermostat), @momodalo (https://github.com/momodalo/broadlinkjs), and @lprhodes (https://github.com/lprhodes/homebridge-broadlink-rm) whose time and effort got this started.
+## Configuration Options
 
-In this fork: Thanks to @kiwi-cam (https://github.com/kiwi-cam), @Cloudore (https://github.com/Cloudore) and @Faisalthe01 (https://github.com/Faisalthe01) for your work!
+- `waterFunctionDuration`: Auto-off time for shower/bidet functions (default: 60 seconds)
+- `dryDuration`: Auto-off time for dry function (default: 60 seconds)  
+- `bidetName`: Custom name for bidet function
+- `showerName`: Custom name for shower function
+- `dryName`: Custom name for dry function
+- `powerSaveName`: Custom name for power save function
+
+## Supported Devices
+
+- Broadlink RM Mini 3
+- Broadlink RM Pro
+- Broadlink RM4 series
+- Any Broadlink device with IR capability
+
+## Troubleshooting
+
+1. **Device not found**: Make sure your Broadlink device is on the same network
+2. **IR codes not working**: Use the Learn function to capture codes directly from your remote
+3. **Auto-off not working**: Check the duration settings in your config
+
+## Credits
+
+Based on the homebridge-broadlink-rm platform by kiwi-cam.

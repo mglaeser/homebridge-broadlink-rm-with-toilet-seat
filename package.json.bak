@@ -1,5 +1,5 @@
 {
-  "name": "homebridge-smart-toilet-seat",
+  "name": "homebridge-broadlink-rm-pro",
   "displayName": "Homebridge Broadlink RM Pro",
   "version": "4.4.19",
   "description": "Broadlink RM plugin (including the mini and pro) for homebridge with AC Pro and TV features",
