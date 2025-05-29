@@ -1,8 +1,8 @@
 {
   "name": "homebridge-smart-toilet-seat",
-  "displayName": "Homebridge Broadlink RM Pro",
-  "version": "4.4.19",
-  "description": "Broadlink RM plugin (including the mini and pro) for homebridge with AC Pro and TV features",
+  "displayName": "Smart Toilet Seat for Homebridge",
+  "version": "1.0.0",
+  "description": "Smart Toilet Seat plugin for Homebridge with IR control via Broadlink RM devices",
   "license": "ISC",
   "scripts": {
     "release": "release-it",
@@ -11,10 +11,11 @@
   },
   "keywords": [
     "homebridge-plugin",
+    "smart-toilet",
+    "toilet-seat",
     "broadlink",
-    "rm pro 3",
-    "rm mini 3",
-    "rm4"
+    "IR",
+    "bathroom"
   ],
   "engines": {
     "node": ">=7.6.0",
@@ -26,7 +27,7 @@
   "funding": "https://paypal.me/kiwicamRM",
   "repository": {
     "type": "git",
-    "url": "git@github.com:kiwi-cam/homebridge-broadlink-rm.git"
+    "url": "git@github.com:your-username/homebridge-smart-toilet-seat.git"
   },
   "dependencies": {
     "await-semaphore": "^0.1.3",
