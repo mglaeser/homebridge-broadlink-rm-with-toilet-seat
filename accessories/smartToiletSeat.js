@@ -16,18 +16,15 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
       bidetActive: false,
       dryActive: false
     };
-
-    // Set default power state to ON if not already set (after parent constructor and loadState)
-    if (this.state.switchState === undefined) {
-      this.state.switchState = true;
-      if (this.logLevel <= 2) {
-        this.log(`${config.name}: Setting default power state to ON`);
-      }
-    }
   }
 
   setDefaults() {
     super.setDefaults();
+    
+    // Set default power state to ON (before loadState runs)
+    // This will be the default for new installations
+    // loadState() will override this if there's saved state
+    this.state.switchState = true;
   }
 
   reset() {
