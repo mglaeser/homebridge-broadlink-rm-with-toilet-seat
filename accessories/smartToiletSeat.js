@@ -60,6 +60,46 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
           log(`${name} Power: ${state.switchState ? 'ON' : 'OFF'}`);
         }
       }
+
+      // If turning OFF main power, turn off all other functions
+      if (!state.switchState) {
+        if (logLevel <= 2) {
+          log(`${name} Main power OFF - turning off all functions`);
+        }
+        
+        // Turn off all toilet functions
+        this.toiletState.powerSaveState = false;
+        this.toiletState.showerActive = false;
+        this.toiletState.bidetActive = false;
+        this.toiletState.dryActive = false;
+
+        // Clear all timeouts
+        Object.keys(this.waterFunctionTimeouts).forEach(key => {
+          if (this.waterFunctionTimeouts[key]) {
+            clearTimeout(this.waterFunctionTimeouts[key]);
+            delete this.waterFunctionTimeouts[key];
+          }
+        });
+
+        // Update all service characteristics
+        this.serviceManagers.forEach(service => {
+          if (service.subtype === 'powersave') {
+            service.updateCharacteristic(Characteristic.On, false);
+          } else if (service.subtype === 'shower' || service.subtype === 'bidet') {
+            service.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
+            service.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
+          } else if (service.subtype === 'dry') {
+            service.updateCharacteristic(Characteristic.On, false);
+          }
+        });
+
+        // Send off commands for all functions
+        const { data } = this;
+        if (data.powerSaveOff) await this.performSend(data.powerSaveOff);
+        if (data.showerOff) await this.performSend(data.showerOff);
+        if (data.bidetOff) await this.performSend(data.bidetOff);
+        if (data.dryOff) await this.performSend(data.dryOff);
+      }
     } catch (error) {
       if (logLevel <= 4) {
         log(`${name} Power control error: ${error.message}`);
@@ -89,7 +129,45 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         }
       }
 
-      // Clear existing timeout
+      // If turning ON this function, turn OFF the other water/dry functions (mutual exclusion)
+      if (active) {
+        const otherFunctions = ['shower', 'bidet', 'dry'].filter(f => f !== functionType);
+        
+        for (const otherFunction of otherFunctions) {
+          if (this.toiletState[`${otherFunction}Active`]) {
+            if (logLevel <= 2) {
+              log(`${name} ${functionType} ON - turning off ${otherFunction}`);
+            }
+            
+            this.toiletState[`${otherFunction}Active`] = false;
+            
+            // Send off command
+            const offHexData = data[`${otherFunction}Off`];
+            if (offHexData) {
+              await this.performSend(offHexData);
+            }
+            
+            // Clear timeout for other function
+            if (this.waterFunctionTimeouts[otherFunction]) {
+              clearTimeout(this.waterFunctionTimeouts[otherFunction]);
+              delete this.waterFunctionTimeouts[otherFunction];
+            }
+            
+            // Update other service UI
+            const otherService = this.serviceManagers.find(s => s.subtype === otherFunction);
+            if (otherService) {
+              if (otherFunction === 'dry') {
+                otherService.updateCharacteristic(Characteristic.On, false);
+              } else {
+                otherService.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
+                otherService.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
+              }
+            }
+          }
+        }
+      }
+
+      // Clear existing timeout for this function
       if (this.waterFunctionTimeouts[functionType]) {
         clearTimeout(this.waterFunctionTimeouts[functionType]);
         delete this.waterFunctionTimeouts[functionType];
@@ -97,7 +175,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
 
       // Set auto-off timer if activated
       if (active) {
-        const duration = config.waterFunctionDuration;
+        const duration = functionType === 'dry' ? config.dryFunctionDuration : config.waterFunctionDuration;
         if (logLevel <= 2) {
           log(`${name} ${functionType}: Auto-off in ${duration} seconds`);
         }
@@ -115,8 +193,12 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
             // Find and update the service
             const service = this.serviceManagers.find(s => s.subtype === functionType);
             if (service) {
-              service.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
-              service.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
+              if (functionType === 'dry') {
+                service.updateCharacteristic(Characteristic.On, false);
+              } else {
+                service.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
+                service.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
+              }
             }
             
             delete this.waterFunctionTimeouts[functionType];
@@ -135,70 +217,6 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     } catch (error) {
       if (logLevel <= 4) {
         log(`${name} ${functionType} control error: ${error.message}`);
-      }
-      throw error;
-    }
-  }
-
-  async setDryState(active) {
-    const { config, log, name, logLevel, data } = this;
-    
-    try {
-      this.toiletState.dryActive = active;
-      const hexData = active ? data.dryOn : data.dryOff;
-      
-      if (hexData) {
-        await this.performSend(hexData);
-        if (logLevel <= 2) {
-          log(`${name} Dry: ${active ? 'ON' : 'OFF'}`);
-        }
-      }
-
-      // Clear existing timeout
-      if (this.waterFunctionTimeouts.dry) {
-        clearTimeout(this.waterFunctionTimeouts.dry);
-        delete this.waterFunctionTimeouts.dry;
-      }
-
-      // Set auto-off timer if activated
-      if (active) {
-        const duration = config.dryFunctionDuration;
-        if (logLevel <= 2) {
-          log(`${name} Dry: Auto-off in ${duration} seconds`);
-        }
-        
-        this.waterFunctionTimeouts.dry = setTimeout(async () => {
-          try {
-            this.toiletState.dryActive = false;
-            
-            // Send off command
-            const offHexData = data.dryOff;
-            if (offHexData) {
-              await this.performSend(offHexData);
-            }
-            
-            // Find and update the service
-            const service = this.serviceManagers.find(s => s.subtype === 'dry');
-            if (service) {
-              service.updateCharacteristic(Characteristic.On, false);
-            }
-            
-            delete this.waterFunctionTimeouts.dry;
-            
-            if (logLevel <= 2) {
-              log(`${name} Dry: Auto-off executed`);
-            }
-          } catch (timeoutError) {
-            if (logLevel <= 4) {
-              log(`${name} Dry auto-off error: ${timeoutError.message}`);
-            }
-            delete this.waterFunctionTimeouts.dry;
-          }
-        }, duration * 1000);
-      }
-    } catch (error) {
-      if (logLevel <= 4) {
-        log(`${name} Dry control error: ${error.message}`);
       }
       throw error;
     }
@@ -298,6 +316,8 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
 
       // Power Save Switch
       const powerSaveService = new Service.Switch(serviceNames.powerSave, 'powersave');
+      powerSaveService.addOptionalCharacteristic(Characteristic.ConfiguredName);
+      powerSaveService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.powerSave);
       powerSaveService.getCharacteristic(Characteristic.On)
         .onGet(() => this.toiletState.powerSaveState)
         .onSet(async (value) => {
@@ -318,6 +338,8 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
 
       // Shower Valve
       const showerService = new Service.Valve(serviceNames.shower, 'shower');
+      showerService.addOptionalCharacteristic(Characteristic.ConfiguredName);
+      showerService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.shower);
       showerService.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.WATER_FAUCET);
       showerService.getCharacteristic(Characteristic.Active)
         .onGet(() => this.toiletState.showerActive ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE)
@@ -331,6 +353,8 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
 
       // Bidet Valve
       const bidetService = new Service.Valve(serviceNames.bidet, 'bidet');
+      bidetService.addOptionalCharacteristic(Characteristic.ConfiguredName);
+      bidetService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.bidet);
       bidetService.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.WATER_FAUCET);
       bidetService.getCharacteristic(Characteristic.Active)
         .onGet(() => this.toiletState.bidetActive ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE)
@@ -344,10 +368,13 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
 
       // Dry Fan
       const dryService = new Service.Fan(serviceNames.dry, 'dry');
+      dryService.addOptionalCharacteristic(Characteristic.ConfiguredName);
+      dryService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.dry);
       dryService.getCharacteristic(Characteristic.On)
         .onGet(() => this.toiletState.dryActive)
         .onSet(async (value) => {
-          await this.setDryState(value);
+          // Use the same logic as water functions for mutual exclusion
+          await this.setWaterFunction('dry', value);
         });
       this.serviceManagers.push(dryService);
 
