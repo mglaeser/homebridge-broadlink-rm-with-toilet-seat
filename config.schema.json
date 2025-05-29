@@ -1,0 +1,259 @@
+{
+  "pluginAlias": "SmartToiletSeat",
+  "pluginType": "platform",
+  "singular": false,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Platform Name",
+        "type": "string",
+        "default": "Smart Toilet Seat Platform",
+        "required": true
+      },
+      "hideWelcomeMessage": {
+        "title": "Hide Welcome Message",
+        "type": "boolean",
+        "default": false
+      },
+      "logLevel": {
+        "title": "Log Level",
+        "type": "string",
+        "default": "info",
+        "oneOf": [
+          { "title": "None", "enum": ["none"] },
+          { "title": "Critical", "enum": ["critical"] },
+          { "title": "Error", "enum": ["error"] },
+          { "title": "Warning", "enum": ["warning"] },
+          { "title": "Info", "enum": ["info"] },
+          { "title": "Debug", "enum": ["debug"] },
+          { "title": "Trace", "enum": ["trace"] }
+        ]
+      },
+      "hosts": {
+        "title": "Broadlink Devices",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "title": "IP Address",
+              "type": "string",
+              "required": true,
+              "format": "ipv4",
+              "placeholder": "192.168.1.100"
+            },
+            "mac": {
+              "title": "MAC Address",
+              "type": "string",
+              "required": true,
+              "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$",
+              "placeholder": "xx:xx:xx:xx:xx:xx"
+            },
+            "isRM4": {
+              "title": "Is RM4 Device",
+              "type": "boolean",
+              "default": true
+            },
+            "isRFSupported": {
+              "title": "RF Support",
+              "type": "boolean",
+              "default": false
+            }
+          }
+        }
+      },
+      "accessories": {
+        "title": "Smart Toilet Seats",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Toilet Name",
+              "type": "string",
+              "required": true,
+              "placeholder": "Smart Toilet"
+            },
+            "type": {
+              "title": "Accessory Type",
+              "type": "string",
+              "default": "smart-toilet-seat",
+              "enum": ["smart-toilet-seat"]
+            },
+            "showerName": {
+              "title": "Shower Function Name",
+              "type": "string",
+              "placeholder": "Shower"
+            },
+            "bidetName": {
+              "title": "Bidet Function Name", 
+              "type": "string",
+              "placeholder": "Bidet"
+            },
+            "dryName": {
+              "title": "Dry Function Name",
+              "type": "string", 
+              "placeholder": "Dry"
+            },
+            "powerSaveName": {
+              "title": "Power Save Function Name",
+              "type": "string",
+              "placeholder": "Power Save"
+            },
+            "data": {
+              "title": "IR Hex Codes",
+              "type": "object",
+              "properties": {
+                "powerOn": {
+                  "title": "Power On Code",
+                  "type": "string",
+                  "required": true
+                },
+                "powerOff": {
+                  "title": "Power Off Code", 
+                  "type": "string",
+                  "required": true
+                },
+                "powerSaveOn": {
+                  "title": "Power Save On Code",
+                  "type": "string",
+                  "required": true
+                },
+                "powerSaveOff": {
+                  "title": "Power Save Off Code",
+                  "type": "string", 
+                  "required": true
+                },
+                "showerOn": {
+                  "title": "Shower On Code",
+                  "type": "string",
+                  "required": true
+                },
+                "showerOff": {
+                  "title": "Shower Off Code",
+                  "type": "string",
+                  "required": true
+                },
+                "bidetOn": {
+                  "title": "Bidet On Code", 
+                  "type": "string",
+                  "required": true
+                },
+                "bidetOff": {
+                  "title": "Bidet Off Code",
+                  "type": "string",
+                  "required": true
+                },
+                "dryOn": {
+                  "title": "Dry On Code",
+                  "type": "string",
+                  "required": true
+                },
+                "dryOff": {
+                  "title": "Dry Off Code",
+                  "type": "string",
+                  "required": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "hideLearnButton": {
+        "title": "Hide Learn Button",
+        "type": "boolean",
+        "default": false
+      },
+      "hideScanFrequencyButton": {
+        "title": "Hide Scan Frequency Button", 
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "layout": [
+    {
+      "type": "fieldset",
+      "title": "Platform Settings",
+      "items": [
+        "name",
+        "logLevel",
+        "hideWelcomeMessage"
+      ]
+    },
+    {
+      "type": "fieldset", 
+      "title": "Broadlink Devices",
+      "expandable": true,
+      "items": [
+        {
+          "key": "hosts",
+          "type": "array",
+          "orderable": false,
+          "buttonText": "Add Device",
+          "items": [
+            "hosts[].address",
+            "hosts[].mac", 
+            "hosts[].isRM4",
+            "hosts[].isRFSupported"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Smart Toilet Seats",
+      "expandable": true, 
+      "items": [
+        {
+          "key": "accessories",
+          "type": "array",
+          "orderable": false,
+          "buttonText": "Add Toilet Seat",
+          "items": [
+            "accessories[].name",
+            "accessories[].type",
+            {
+              "type": "fieldset",
+              "title": "Service Names (Optional)",
+              "expandable": true,
+              "items": [
+                "accessories[].showerName",
+                "accessories[].bidetName", 
+                "accessories[].dryName",
+                "accessories[].powerSaveName"
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "IR Hex Codes",
+              "expandable": true,
+              "items": [
+                "accessories[].data.powerOn",
+                "accessories[].data.powerOff",
+                "accessories[].data.powerSaveOn", 
+                "accessories[].data.powerSaveOff",
+                "accessories[].data.showerOn",
+                "accessories[].data.showerOff",
+                "accessories[].data.bidetOn",
+                "accessories[].data.bidetOff",
+                "accessories[].data.dryOn",
+                "accessories[].data.dryOff"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Learning Options",
+      "expandable": true,
+      "items": [
+        "hideLearnButton",
+        "hideScanFrequencyButton"
+      ]
+    }
+  ]
+}

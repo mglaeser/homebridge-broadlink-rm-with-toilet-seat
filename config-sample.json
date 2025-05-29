@@ -23,8 +23,6 @@
             {
                 "name": "Smart Toilet",
                 "type": "smart-toilet-seat",
-                "waterFunctionDuration": 45,
-                "dryDuration": 60,
                 "bidetName": "Bidet",
                 "showerName": "Shower",
                 "dryName": "Dry Fan",
