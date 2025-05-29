@@ -29,6 +29,11 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     // Set default auto-off duration for water functions
     config.waterFunctionDuration = config.waterFunctionDuration || 60;
     config.dryFunctionDuration = config.dryDuration || 60;
+
+    // Set default power state to ON when initialized
+    if (this.state.switchState === undefined) {
+      this.state.switchState = true;
+    }
   }
 
   reset() {
@@ -136,16 +141,17 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         for (const otherFunction of otherFunctions) {
           if (this.toiletState[`${otherFunction}Active`]) {
             if (logLevel <= 2) {
-              log(`${name} ${functionType} ON - turning off ${otherFunction}`);
+              log(`${name} ${functionType} ON - turning off ${otherFunction} (UI only, no IR command)`);
             }
             
+            // Update internal state
             this.toiletState[`${otherFunction}Active`] = false;
             
-            // Send off command
-            const offHexData = data[`${otherFunction}Off`];
-            if (offHexData) {
-              await this.performSend(offHexData);
-            }
+            // DON'T send off command - let the function stop naturally
+            // const offHexData = data[`${otherFunction}Off`];
+            // if (offHexData) {
+            //   await this.performSend(offHexData);
+            // }
             
             // Clear timeout for other function
             if (this.waterFunctionTimeouts[otherFunction]) {
@@ -184,7 +190,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
           try {
             this.toiletState[stateKey] = false;
             
-            // Send off command
+            // Send off command for auto-off (this is different from manual switching)
             const offHexData = data[`${functionType}Off`];
             if (offHexData) {
               await this.performSend(offHexData);
