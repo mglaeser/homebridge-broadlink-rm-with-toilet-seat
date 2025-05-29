@@ -68,6 +68,12 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     }
   }
 
+  // Getter methods for characteristics
+  getOutletInUse(callback) {
+    // OutletInUse should return true when the outlet is in use (powered on)
+    callback(null, this.state.switchState || false);
+  }
+
   async setWaterFunction(functionType, active) {
     const { config, log, name, logLevel, data } = this;
     const stateKey = `${functionType}Active`;
@@ -275,7 +281,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
       this.serviceManager.addGetCharacteristic({
         name: 'outletInUse',
         type: Characteristic.OutletInUse,
-        method: this.getCharacteristicValue,
+        method: this.getOutletInUse,
         bind: this
       });
 
