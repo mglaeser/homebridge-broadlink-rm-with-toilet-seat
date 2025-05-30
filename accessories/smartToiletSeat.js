@@ -312,75 +312,79 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         });
       this.serviceManagers.push(dryService);
 
-      // ✅ FIXED: Stop Button with proper UI updates
-      if (data.stopAll) {
-        const stopService = new Service.Switch(serviceNames.stop, 'stop');
-        stopService.addOptionalCharacteristic(Characteristic.ConfiguredName);
-        stopService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.stop);
-        
-        stopService.getCharacteristic(Characteristic.On)
-          .onGet(() => false) // Always return OFF (stateless button)
-          .onSet(async (value) => {
-            try {
-              if (value) { // Only act when turned ON
-                if (logLevel <= 2) {
-                  log(`${name} Stop Button: Stopping all actions`);
-                }
-                
-                // ✅ IMMEDIATELY reset to OFF (stateless behavior)
-                stopService.updateCharacteristic(Characteristic.On, false);
-                
-                // Send stop command
-                await this.performSend(data.stopAll);
-                
-                // ✅ FIXED: Update internal states FIRST
-                this.toiletState.showerActive = false;
-                this.toiletState.bidetActive = false;
-                this.toiletState.dryActive = false;
-                this.toiletState.powerSaveState = false;
-                
-                // ✅ FIXED: Update UIs using direct service references (not forEach)
-                // Find and update each service directly
-                const powerSaveService = this.serviceManagers.find(s => s.subtype === 'powersave');
-                const showerService = this.serviceManagers.find(s => s.subtype === 'shower');
-                const bidetService = this.serviceManagers.find(s => s.subtype === 'bidet');
-                const dryService = this.serviceManagers.find(s => s.subtype === 'dry');
-                
-                if (powerSaveService) {
-                  powerSaveService.updateCharacteristic(Characteristic.On, false);
-                  if (logLevel <= 1) log(`${name} Stop: Power Save UI updated`);
-                }
-                
-                if (showerService) {
-                  showerService.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
-                  showerService.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
-                  if (logLevel <= 1) log(`${name} Stop: Shower UI updated`);
-                }
-                
-                if (bidetService) {
-                  bidetService.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
-                  bidetService.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
-                  if (logLevel <= 1) log(`${name} Stop: Bidet UI updated`);
-                }
-                
-                if (dryService) {
-                  dryService.updateCharacteristic(Characteristic.On, false);
-                  if (logLevel <= 1) log(`${name} Stop: Dry UI updated`);
-                }
-              }
-            } catch (error) {
-              log(`${name} Stop Button error: ${error.message}`);
-              // ✅ ALWAYS reset button to OFF, even on error
-              stopService.updateCharacteristic(Characteristic.On, false);
-            }
-          });
-        
-        this.serviceManagers.push(stopService);
-        
-        if (logLevel <= 2) {
-          log(`${name}: Stop button "${serviceNames.stop}" added`);
+// ✅ FIXED: Stop Button with proper stateless behavior
+if (data.stopAll) {
+  const stopService = new Service.Switch(serviceNames.stop, 'stop');
+  stopService.addOptionalCharacteristic(Characteristic.ConfiguredName);
+  stopService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.stop);
+  
+  stopService.getCharacteristic(Characteristic.On)
+    .onGet(() => false) // Always return OFF (stateless button)
+    .onSet(async (value) => {
+      try {
+        if (value) { // Only act when turned ON
+          if (logLevel <= 2) {
+            log(`${name} Stop Button: Stopping all actions`);
+          }
+          
+          // Send stop command first
+          await this.performSend(data.stopAll);
+          
+          // ✅ FIXED: Update internal states
+          this.toiletState.showerActive = false;
+          this.toiletState.bidetActive = false;
+          this.toiletState.dryActive = false;
+          this.toiletState.powerSaveState = false;
+          
+          // ✅ FIXED: Update UIs using direct service references
+          const powerSaveService = this.serviceManagers.find(s => s.subtype === 'powersave');
+          const showerService = this.serviceManagers.find(s => s.subtype === 'shower');
+          const bidetService = this.serviceManagers.find(s => s.subtype === 'bidet');
+          const dryService = this.serviceManagers.find(s => s.subtype === 'dry');
+          
+          if (powerSaveService) {
+            powerSaveService.updateCharacteristic(Characteristic.On, false);
+            if (logLevel <= 1) log(`${name} Stop: Power Save UI updated`);
+          }
+          
+          if (showerService) {
+            showerService.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
+            showerService.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
+            if (logLevel <= 1) log(`${name} Stop: Shower UI updated`);
+          }
+          
+          if (bidetService) {
+            bidetService.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
+            bidetService.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
+            if (logLevel <= 1) log(`${name} Stop: Bidet UI updated`);
+          }
+          
+          if (dryService) {
+            dryService.updateCharacteristic(Characteristic.On, false);
+            if (logLevel <= 1) log(`${name} Stop: Dry UI updated`);
+          }
+          
+          // ✅ KEY FIX: Use setTimeout to reset button state after HomeKit UI updates
+          setTimeout(() => {
+            stopService.updateCharacteristic(Characteristic.On, false);
+            if (logLevel <= 1) log(`${name} Stop: Button reset to OFF`);
+          }, 100); // Small delay allows HomeKit to process the ON state first
         }
+      } catch (error) {
+        log(`${name} Stop Button error: ${error.message}`);
+        // ✅ ALWAYS reset button to OFF with delay, even on error
+        setTimeout(() => {
+          stopService.updateCharacteristic(Characteristic.On, false);
+        }, 100);
       }
+    });
+  
+  this.serviceManagers.push(stopService);
+  
+  if (logLevel <= 2) {
+    log(`${name}: Stop button "${serviceNames.stop}" added`);
+  }
+}
 
       // Final logging - MINIMAL CHANGE
       if (logLevel <= 2) {
