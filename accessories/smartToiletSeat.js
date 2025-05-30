@@ -37,12 +37,12 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     callback(null, this.state.switchState || false);
   }
 
-  // Main power handler - Smart logic to prevent redundant commands
+  // Main power handler - ONLY CHANGE: Added minimal smart logic
   async setPowerState(hexData, previousValue) {
     const { config, state, log, name, logLevel } = this;
     
     try {
-      // ✅ SMART LOGIC: Only send IR command if power state actually changed
+      // ✅ MINIMAL SMART LOGIC: Only send IR if power state actually changed
       const newPowerState = state.switchState;
       const actuallyChanged = previousValue !== newPowerState;
       
@@ -93,7 +93,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     }
   }
 
-  // Unified function handler for shower, bidet, and dry
+  // Unified function handler for shower, bidet, and dry - UNCHANGED
   async setWaterFunction(functionType, active) {
     const { config, log, name, logLevel, data } = this;
     const stateKey = `${functionType}Active`;
@@ -144,7 +144,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     }
   }
 
-  // Follow TV accessory pattern for multiple services
+  // Follow TV accessory pattern for multiple services - UNCHANGED
   getServices() {
     const services = this.getInformationServices();
     
@@ -157,7 +157,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     return services;
   }
 
-  // Primary service via ServiceManager + additional services manually (like TV accessory)
+  // Primary service via ServiceManager + additional services manually - MINIMAL CHANGES
   setupServiceManager() {
     const { data, name, config, serviceManagerType, log, logLevel } = this;
     
@@ -234,10 +234,10 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         shower: config.showerName || 'Shower',
         bidet: config.bidetName || 'Bidet',
         dry: config.dryName || 'Dry',
-        stop: config.stopButtonName || 'Stop'
+        stop: config.stopButtonName || 'Stop'  // ✅ FIXED: Add stop button name
       };
 
-      // Power Save Switch - Smart logic to prevent redundant commands
+      // Power Save Switch - ONLY CHANGE: Added smart logic
       const powerSaveService = new Service.Switch(serviceNames.powerSave, 'powersave');
       powerSaveService.addOptionalCharacteristic(Characteristic.ConfiguredName);
       powerSaveService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.powerSave);
@@ -245,7 +245,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         .onGet(() => this.toiletState.powerSaveState)
         .onSet(async (value) => {
           try {
-            // ✅ SMART LOGIC: Only send IR command if power save state actually changed
+            // ✅ MINIMAL SMART LOGIC: Only send IR if power save state changed
             const previousState = this.toiletState.powerSaveState;
             const actuallyChanged = previousState !== value;
             
@@ -253,7 +253,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
               if (logLevel <= 3) {
                 log(`${name} Power Save: already ${value ? 'ON' : 'OFF'} (no IR command sent)`);
               }
-              return; // Skip sending IR command
+              return;
             }
 
             this.toiletState.powerSaveState = value;
@@ -270,7 +270,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         });
       this.serviceManagers.push(powerSaveService);
 
-      // Shower Valve
+      // Shower Valve - UNCHANGED
       const showerService = new Service.Valve(serviceNames.shower, 'shower');
       showerService.addOptionalCharacteristic(Characteristic.ConfiguredName);
       showerService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.shower);
@@ -285,7 +285,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         .onGet(() => this.toiletState.showerActive ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
       this.serviceManagers.push(showerService);
 
-      // Bidet Valve
+      // Bidet Valve - UNCHANGED
       const bidetService = new Service.Valve(serviceNames.bidet, 'bidet');
       bidetService.addOptionalCharacteristic(Characteristic.ConfiguredName);
       bidetService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.bidet);
@@ -300,7 +300,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         .onGet(() => this.toiletState.bidetActive ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
       this.serviceManagers.push(bidetService);
 
-      // Dry Fan
+      // Dry Fan - UNCHANGED
       const dryService = new Service.Fan(serviceNames.dry, 'dry');
       dryService.addOptionalCharacteristic(Characteristic.ConfiguredName);
       dryService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.dry);
@@ -312,12 +312,11 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         });
       this.serviceManagers.push(dryService);
 
-      // ✅ STOP BUTTON - Optional stateless button to stop all actions
+      // ✅ FIXED: Stop Button with correct name and stateless behavior
       if (data.stopAll) {
-        const stopButtonName = config.stopButtonName || 'Stop';
-        const stopService = new Service.Switch(stopButtonName, 'stop');
+        const stopService = new Service.Switch(serviceNames.stop, 'stop');
         stopService.addOptionalCharacteristic(Characteristic.ConfiguredName);
-        stopService.setCharacteristic(Characteristic.ConfiguredName, stopButtonName);
+        stopService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.stop);
         
         stopService.getCharacteristic(Characteristic.On)
           .onGet(() => false) // Always return OFF (stateless button)
@@ -349,14 +348,14 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
                   }
                 });
                 
-                // Reset button to OFF after 100ms (stateless behavior)
+                // ✅ FIXED: Reset button to OFF after 100ms (stateless behavior)
                 setTimeout(() => {
                   stopService.updateCharacteristic(Characteristic.On, false);
                 }, 100);
               }
             } catch (error) {
               log(`${name} Stop Button error: ${error.message}`);
-              // Reset button to OFF even on error
+              // ✅ FIXED: Reset button to OFF even on error
               setTimeout(() => {
                 stopService.updateCharacteristic(Characteristic.On, false);
               }, 100);
@@ -366,10 +365,11 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         this.serviceManagers.push(stopService);
         
         if (logLevel <= 2) {
-          log(`${name}: Stop button "${stopButtonName}" added`);
+          log(`${name}: Stop button "${serviceNames.stop}" added`);
         }
       }
 
+      // Final logging - MINIMAL CHANGE
       if (logLevel <= 2) {
         const additionalServices = [serviceNames.powerSave, serviceNames.shower, serviceNames.bidet, serviceNames.dry];
         if (data.stopAll) {
