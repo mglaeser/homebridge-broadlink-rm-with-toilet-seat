@@ -101,6 +101,11 @@
               "type": "string",
               "placeholder": "Power Save"
             },
+            "stopButtonName": {
+              "title": "Stop Button Name (Optional)",
+              "type": "string",
+              "placeholder": "Stop"
+            },
             "data": {
               "title": "IR Hex Codes",
               "type": "object",
@@ -154,6 +159,11 @@
                   "title": "Dry Off Code",
                   "type": "string",
                   "required": true
+                },
+                "stopAll": {
+                  "title": "Stop All Actions Code (Optional)",
+                  "type": "string",
+                  "description": "Hex code to stop all current toilet functions"
                 }
               }
             }
@@ -222,7 +232,8 @@
                 "accessories[].showerName",
                 "accessories[].bidetName", 
                 "accessories[].dryName",
-                "accessories[].powerSaveName"
+                "accessories[].powerSaveName",
+                "accessories[].stopButtonName"
               ]
             },
             {
@@ -239,7 +250,8 @@
                 "accessories[].data.bidetOn",
                 "accessories[].data.bidetOff",
                 "accessories[].data.dryOn",
-                "accessories[].data.dryOff"
+                "accessories[].data.dryOff",
+                "accessories[].data.stopAll"
               ]
             }
           ]

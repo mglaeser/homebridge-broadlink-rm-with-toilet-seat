@@ -37,7 +37,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     callback(null, this.state.switchState || false);
   }
 
-  // Main power handler - ONLY CHANGE: Added smart logic to prevent redundant commands
+  // Main power handler - Smart logic to prevent redundant commands
   async setPowerState(hexData, previousValue) {
     const { config, state, log, name, logLevel } = this;
     
@@ -93,7 +93,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     }
   }
 
-  // Unified function handler for shower, bidet, and dry - UNCHANGED
+  // Unified function handler for shower, bidet, and dry
   async setWaterFunction(functionType, active) {
     const { config, log, name, logLevel, data } = this;
     const stateKey = `${functionType}Active`;
@@ -144,7 +144,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     }
   }
 
-  // Follow TV accessory pattern for multiple services - UNCHANGED
+  // Follow TV accessory pattern for multiple services
   getServices() {
     const services = this.getInformationServices();
     
@@ -157,7 +157,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     return services;
   }
 
-  // Primary service via ServiceManager + additional services manually (like TV accessory) - UNCHANGED
+  // Primary service via ServiceManager + additional services manually (like TV accessory)
   setupServiceManager() {
     const { data, name, config, serviceManagerType, log, logLevel } = this;
     
@@ -233,10 +233,11 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         powerSave: config.powerSaveName || 'Power Save',
         shower: config.showerName || 'Shower',
         bidet: config.bidetName || 'Bidet',
-        dry: config.dryName || 'Dry'
+        dry: config.dryName || 'Dry',
+        stop: config.stopButtonName || 'Stop'
       };
 
-      // Power Save Switch
+      // Power Save Switch - Smart logic to prevent redundant commands
       const powerSaveService = new Service.Switch(serviceNames.powerSave, 'powersave');
       powerSaveService.addOptionalCharacteristic(Characteristic.ConfiguredName);
       powerSaveService.setCharacteristic(Characteristic.ConfiguredName, serviceNames.powerSave);
@@ -244,6 +245,17 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         .onGet(() => this.toiletState.powerSaveState)
         .onSet(async (value) => {
           try {
+            // ✅ SMART LOGIC: Only send IR command if power save state actually changed
+            const previousState = this.toiletState.powerSaveState;
+            const actuallyChanged = previousState !== value;
+            
+            if (!actuallyChanged) {
+              if (logLevel <= 3) {
+                log(`${name} Power Save: already ${value ? 'ON' : 'OFF'} (no IR command sent)`);
+              }
+              return; // Skip sending IR command
+            }
+
             this.toiletState.powerSaveState = value;
             const hexData = value ? data.powerSaveOn : data.powerSaveOff;
             if (hexData) {
@@ -300,9 +312,72 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         });
       this.serviceManagers.push(dryService);
 
+      // ✅ STOP BUTTON - Optional stateless button to stop all actions
+      if (data.stopAll) {
+        const stopButtonName = config.stopButtonName || 'Stop';
+        const stopService = new Service.Switch(stopButtonName, 'stop');
+        stopService.addOptionalCharacteristic(Characteristic.ConfiguredName);
+        stopService.setCharacteristic(Characteristic.ConfiguredName, stopButtonName);
+        
+        stopService.getCharacteristic(Characteristic.On)
+          .onGet(() => false) // Always return OFF (stateless button)
+          .onSet(async (value) => {
+            try {
+              if (value) { // Only act when turned ON
+                if (logLevel <= 2) {
+                  log(`${name} Stop Button: Stopping all actions`);
+                }
+                
+                // Send stop command
+                await this.performSend(data.stopAll);
+                
+                // Turn off all function states in UI
+                this.toiletState.showerActive = false;
+                this.toiletState.bidetActive = false;
+                this.toiletState.dryActive = false;
+                this.toiletState.powerSaveState = false;
+                
+                // Update all service UIs
+                this.serviceManagers.forEach(service => {
+                  if (service.subtype === 'powersave') {
+                    service.updateCharacteristic(Characteristic.On, false);
+                  } else if (service.subtype === 'shower' || service.subtype === 'bidet') {
+                    service.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
+                    service.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
+                  } else if (service.subtype === 'dry') {
+                    service.updateCharacteristic(Characteristic.On, false);
+                  }
+                });
+                
+                // Reset button to OFF after 100ms (stateless behavior)
+                setTimeout(() => {
+                  stopService.updateCharacteristic(Characteristic.On, false);
+                }, 100);
+              }
+            } catch (error) {
+              log(`${name} Stop Button error: ${error.message}`);
+              // Reset button to OFF even on error
+              setTimeout(() => {
+                stopService.updateCharacteristic(Characteristic.On, false);
+              }, 100);
+            }
+          });
+        
+        this.serviceManagers.push(stopService);
+        
+        if (logLevel <= 2) {
+          log(`${name}: Stop button "${stopButtonName}" added`);
+        }
+      }
+
       if (logLevel <= 2) {
+        const additionalServices = [serviceNames.powerSave, serviceNames.shower, serviceNames.bidet, serviceNames.dry];
+        if (data.stopAll) {
+          additionalServices.push(serviceNames.stop + ' (button)');
+        }
+        
         log(`${name}: Successfully configured with ${this.serviceManagers.length + 1} services`);
-        log(`${name}: Primary: ${name} (Outlet), Additional: ${Object.values(serviceNames).join(', ')}`);
+        log(`${name}: Primary: ${name} (Outlet), Additional: ${additionalServices.join(', ')}`);
       }
 
     } catch (error) {
