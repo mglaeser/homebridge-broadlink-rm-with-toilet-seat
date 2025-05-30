@@ -93,7 +93,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     }
   }
 
-  // Unified function handler for shower, bidet, and dry - UNCHANGED
+  // Unified function handler for shower, bidet, and dry - ALWAYS send codes (multiple levels)
   async setWaterFunction(functionType, active) {
     const { config, log, name, logLevel, data } = this;
     const stateKey = `${functionType}Active`;
@@ -312,7 +312,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         });
       this.serviceManagers.push(dryService);
 
-      // ✅ FIXED: Stop Button with correct stateless behavior
+      // ✅ FIXED: Stop Button with proper UI updates
       if (data.stopAll) {
         const stopService = new Service.Switch(serviceNames.stop, 'stop');
         stopService.addOptionalCharacteristic(Characteristic.ConfiguredName);
@@ -333,23 +333,40 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
                 // Send stop command
                 await this.performSend(data.stopAll);
                 
-                // Turn off all function states in UI
+                // ✅ FIXED: Update internal states FIRST
                 this.toiletState.showerActive = false;
                 this.toiletState.bidetActive = false;
                 this.toiletState.dryActive = false;
                 this.toiletState.powerSaveState = false;
                 
-                // Update all service UIs
-                this.serviceManagers.forEach(service => {
-                  if (service.subtype === 'powersave') {
-                    service.updateCharacteristic(Characteristic.On, false);
-                  } else if (service.subtype === 'shower' || service.subtype === 'bidet') {
-                    service.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
-                    service.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
-                  } else if (service.subtype === 'dry') {
-                    service.updateCharacteristic(Characteristic.On, false);
-                  }
-                });
+                // ✅ FIXED: Update UIs using direct service references (not forEach)
+                // Find and update each service directly
+                const powerSaveService = this.serviceManagers.find(s => s.subtype === 'powersave');
+                const showerService = this.serviceManagers.find(s => s.subtype === 'shower');
+                const bidetService = this.serviceManagers.find(s => s.subtype === 'bidet');
+                const dryService = this.serviceManagers.find(s => s.subtype === 'dry');
+                
+                if (powerSaveService) {
+                  powerSaveService.updateCharacteristic(Characteristic.On, false);
+                  if (logLevel <= 1) log(`${name} Stop: Power Save UI updated`);
+                }
+                
+                if (showerService) {
+                  showerService.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
+                  showerService.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
+                  if (logLevel <= 1) log(`${name} Stop: Shower UI updated`);
+                }
+                
+                if (bidetService) {
+                  bidetService.updateCharacteristic(Characteristic.Active, Characteristic.Active.INACTIVE);
+                  bidetService.updateCharacteristic(Characteristic.InUse, Characteristic.InUse.NOT_IN_USE);
+                  if (logLevel <= 1) log(`${name} Stop: Bidet UI updated`);
+                }
+                
+                if (dryService) {
+                  dryService.updateCharacteristic(Characteristic.On, false);
+                  if (logLevel <= 1) log(`${name} Stop: Dry UI updated`);
+                }
               }
             } catch (error) {
               log(`${name} Stop Button error: ${error.message}`);
