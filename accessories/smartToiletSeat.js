@@ -37,11 +37,22 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     callback(null, this.state.switchState || false);
   }
 
-  // Main power handler
+  // Main power handler - ONLY CHANGE: Added smart logic to prevent redundant commands
   async setPowerState(hexData, previousValue) {
     const { config, state, log, name, logLevel } = this;
     
     try {
+      // ✅ SMART LOGIC: Only send IR command if power state actually changed
+      const newPowerState = state.switchState;
+      const actuallyChanged = previousValue !== newPowerState;
+      
+      if (!actuallyChanged) {
+        if (logLevel <= 3) {
+          log(`${name} Power: already ${newPowerState ? 'ON' : 'OFF'} (no IR command sent)`);
+        }
+        return; // Skip sending IR command
+      }
+
       if (hexData) {
         await this.performSend(hexData);
         if (logLevel <= 2) {
@@ -82,7 +93,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     }
   }
 
-  // Unified function handler for shower, bidet, and dry
+  // Unified function handler for shower, bidet, and dry - UNCHANGED
   async setWaterFunction(functionType, active) {
     const { config, log, name, logLevel, data } = this;
     const stateKey = `${functionType}Active`;
@@ -133,7 +144,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     }
   }
 
-  // Follow TV accessory pattern for multiple services
+  // Follow TV accessory pattern for multiple services - UNCHANGED
   getServices() {
     const services = this.getInformationServices();
     
@@ -146,7 +157,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
     return services;
   }
 
-  // Primary service via ServiceManager + additional services manually (like TV accessory)
+  // Primary service via ServiceManager + additional services manually (like TV accessory) - UNCHANGED
   setupServiceManager() {
     const { data, name, config, serviceManagerType, log, logLevel } = this;
     
