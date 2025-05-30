@@ -312,7 +312,7 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
         });
       this.serviceManagers.push(dryService);
 
-      // ✅ FIXED: Stop Button with correct name and stateless behavior
+      // ✅ FIXED: Stop Button with correct stateless behavior
       if (data.stopAll) {
         const stopService = new Service.Switch(serviceNames.stop, 'stop');
         stopService.addOptionalCharacteristic(Characteristic.ConfiguredName);
@@ -326,6 +326,9 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
                 if (logLevel <= 2) {
                   log(`${name} Stop Button: Stopping all actions`);
                 }
+                
+                // ✅ IMMEDIATELY reset to OFF (stateless behavior)
+                stopService.updateCharacteristic(Characteristic.On, false);
                 
                 // Send stop command
                 await this.performSend(data.stopAll);
@@ -347,18 +350,11 @@ class SmartToiletSeatAccessory extends BroadlinkRMAccessory {
                     service.updateCharacteristic(Characteristic.On, false);
                   }
                 });
-                
-                // ✅ FIXED: Reset button to OFF after 100ms (stateless behavior)
-                setTimeout(() => {
-                  stopService.updateCharacteristic(Characteristic.On, false);
-                }, 100);
               }
             } catch (error) {
               log(`${name} Stop Button error: ${error.message}`);
-              // ✅ FIXED: Reset button to OFF even on error
-              setTimeout(() => {
-                stopService.updateCharacteristic(Characteristic.On, false);
-              }, 100);
+              // ✅ ALWAYS reset button to OFF, even on error
+              stopService.updateCharacteristic(Characteristic.On, false);
             }
           });
         
